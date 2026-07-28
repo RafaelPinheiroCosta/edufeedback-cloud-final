@@ -1,0 +1,20 @@
+CREATE TABLE edufeedback.relatorio_semanal (
+  id UUID PRIMARY KEY,
+  data_inicio DATE NOT NULL,
+  data_fim DATE NOT NULL,
+  media_notas NUMERIC(4,2) NOT NULL,
+  total_avaliacoes INTEGER NOT NULL CHECK (total_avaliacoes >= 0),
+  total_criticas INTEGER NOT NULL CHECK (total_criticas >= 0),
+  total_atencao INTEGER NOT NULL CHECK (total_atencao >= 0),
+  total_normais INTEGER NOT NULL CHECK (total_normais >= 0),
+  status VARCHAR(20) NOT NULL CHECK (status IN ('GERANDO','GERADO','ENVIADO','FALHOU')),
+  conteudo TEXT NOT NULL,
+  data_geracao TIMESTAMPTZ NOT NULL,
+  data_envio TIMESTAMPTZ,
+  ultimo_erro TEXT,
+  versao BIGINT NOT NULL DEFAULT 0,
+  criado_em TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  atualizado_em TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT uk_relatorio_periodo UNIQUE(data_inicio, data_fim),
+  CHECK (data_fim >= data_inicio)
+);

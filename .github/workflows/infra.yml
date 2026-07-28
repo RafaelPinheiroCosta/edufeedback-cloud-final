@@ -1,0 +1,128 @@
+name: CI/CD - Infraestrutura Azure
+
+on:
+  workflow_dispatch:
+
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "infra/**"
+      - ".github/workflows/infra.yml"
+
+  push:
+    branches:
+      - main
+    paths:
+      - "infra/**"
+      - ".github/workflows/infra.yml"
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: edufeedback-infra-prod
+  cancel-in-progress: false
+
+env:
+  RESOURCE_GROUP: rg-edufeedback-prod
+  PARAMETER_FILE: infra/parameters/prod.bicepparam
+  GENERATED_PARAMETER_FILE: infra/parameters/prod.generated.bicepparam
+
+jobs:
+  validate-and-deploy:
+    name: Validar e aplicar infraestrutura
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Obter código-fonte
+        uses: actions/checkout@v4
+
+      - name: Autenticar no Azure com OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Criar arquivo temporário de parâmetros
+        shell: python
+        env:
+          ADMIN_EMAIL: ${{ vars.ADMIN_EMAIL }}
+          POSTGRES_ADMIN_PASSWORD: ${{ secrets.POSTGRES_ADMIN_PASSWORD }}
+        run: |
+          import os
+          from pathlib import Path
+
+          source_path = Path(os.environ["PARAMETER_FILE"])
+          generated_path = Path(os.environ["GENERATED_PARAMETER_FILE"])
+
+          admin_email = os.environ.get("ADMIN_EMAIL", "").strip()
+          postgres_password = os.environ.get("POSTGRES_ADMIN_PASSWORD", "")
+
+          if not admin_email:
+              raise RuntimeError(
+                  "A variável ADMIN_EMAIL não foi configurada no GitHub."
+              )
+
+          if not postgres_password:
+              raise RuntimeError(
+                  "O secret POSTGRES_ADMIN_PASSWORD não foi configurado no GitHub."
+              )
+
+          def bicep_string(value: str) -> str:
+              return value.replace("'", "''")
+
+          original = source_path.read_text(encoding="utf-8")
+
+          generated = (
+              original.rstrip()
+              + "\n\n"
+              + "// Valores fornecidos temporariamente pelo GitHub Actions.\n"
+              + f"param adminEmail = '{bicep_string(admin_email)}'\n"
+              + "param databaseAdminPassword = "
+              + f"'{bicep_string(postgres_password)}'\n"
+          )
+
+          generated_path.write_text(generated, encoding="utf-8")
+
+      - name: Compilar o Bicep
+        run: |
+          az bicep build \
+            --file infra/main.bicep
+
+      - name: Validar o deployment
+        run: |
+          az deployment group validate \
+            --resource-group "${RESOURCE_GROUP}" \
+            --parameters "${GENERATED_PARAMETER_FILE}" \
+            --output none
+
+      - name: Executar what-if
+        run: |
+          az deployment group what-if \
+            --resource-group "${RESOURCE_GROUP}" \
+            --parameters "${GENERATED_PARAMETER_FILE}"
+
+      - name: Aplicar infraestrutura
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        run: |
+          DEPLOYMENT_NAME="edufeedback-${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}"
+
+          az deployment group create \
+            --name "${DEPLOYMENT_NAME}" \
+            --resource-group "${RESOURCE_GROUP}" \
+            --parameters "${GENERATED_PARAMETER_FILE}" \
+            --output table
+
+      - name: Excluir arquivo temporário
+        if: always()
+        shell: bash
+        run: |
+          rm -f "${GENERATED_PARAMETER_FILE}"
+
+      - name: Logout do Azure
+        if: always()
+        run: az logout

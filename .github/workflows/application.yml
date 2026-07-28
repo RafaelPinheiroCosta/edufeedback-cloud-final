@@ -1,0 +1,142 @@
+name: CD - Azure Functions
+
+on:
+  workflow_dispatch:
+
+  push:
+    branches:
+      - main
+    paths:
+      - "pom.xml"
+      - ".mvn/**"
+      - "mvnw"
+      - "mvnw.cmd"
+      - "edufeedback-*/**"
+      - ".github/workflows/application.yml"
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: edufeedback-functions-prod
+  cancel-in-progress: false
+
+env:
+  RESOURCE_GROUP: rg-edufeedback-prod
+
+  AZURE_HTTP_FUNCTION_APP: func-edufeedback-http-rpc2026
+  AZURE_NOTIFICATION_FUNCTION_APP: func-edufeedback-notification-rpc2026
+  AZURE_REPORT_FUNCTION_APP: func-edufeedback-report-rpc2026
+
+jobs:
+  build-test-deploy:
+    name: Build, testes e deployment
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+
+    steps:
+      - name: Obter código-fonte
+        uses: actions/checkout@v4
+
+      - name: Configurar Java 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: corretto
+          java-version: "21"
+          cache: maven
+
+      - name: Dar permissão ao Maven Wrapper
+        run: chmod +x ./mvnw
+
+      - name: Compilar, testar e empacotar
+        run: ./mvnw --batch-mode --no-transfer-progress clean verify
+
+      - name: Validar pacote da HTTP Function
+        shell: bash
+        run: |
+          PACKAGE_PATH="edufeedback-http-function/target/azure-functions/${AZURE_HTTP_FUNCTION_APP}"
+
+          if [ ! -f "${PACKAGE_PATH}/host.json" ]; then
+            echo "Pacote da HTTP Function não encontrado em ${PACKAGE_PATH}."
+            find edufeedback-http-function/target -maxdepth 5 -type f | sort || true
+            exit 1
+          fi
+
+      - name: Validar pacote da Notification Function
+        shell: bash
+        run: |
+          PACKAGE_PATH="edufeedback-notification-function/target/azure-functions/${AZURE_NOTIFICATION_FUNCTION_APP}"
+
+          if [ ! -f "${PACKAGE_PATH}/host.json" ]; then
+            echo "Pacote da Notification Function não encontrado em ${PACKAGE_PATH}."
+            find edufeedback-notification-function/target -maxdepth 5 -type f | sort || true
+            exit 1
+          fi
+
+      - name: Validar pacote da Report Function
+        shell: bash
+        run: |
+          PACKAGE_PATH="edufeedback-report-function/target/azure-functions/${AZURE_REPORT_FUNCTION_APP}"
+
+          if [ ! -f "${PACKAGE_PATH}/host.json" ]; then
+            echo "Pacote da Report Function não encontrado em ${PACKAGE_PATH}."
+            find edufeedback-report-function/target -maxdepth 5 -type f | sort || true
+            exit 1
+          fi
+
+      - name: Autenticar no Azure com OIDC
+        uses: azure/login@v2
+        with:
+          client-id: ${{ vars.AZURE_CLIENT_ID }}
+          tenant-id: ${{ vars.AZURE_TENANT_ID }}
+          subscription-id: ${{ vars.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Confirmar assinatura Azure
+        run: |
+          az account show \
+            --query "{subscription:name, subscriptionId:id, tenantId:tenantId}" \
+            --output table
+
+      - name: Publicar HTTP Function
+        uses: Azure/functions-action@v1
+        with:
+          app-name: ${{ env.AZURE_HTTP_FUNCTION_APP }}
+          package: edufeedback-http-function/target/azure-functions/${{ env.AZURE_HTTP_FUNCTION_APP }}
+
+      - name: Publicar Notification Function
+        uses: Azure/functions-action@v1
+        with:
+          app-name: ${{ env.AZURE_NOTIFICATION_FUNCTION_APP }}
+          package: edufeedback-notification-function/target/azure-functions/${{ env.AZURE_NOTIFICATION_FUNCTION_APP }}
+
+      - name: Publicar Report Function
+        uses: Azure/functions-action@v1
+        with:
+          app-name: ${{ env.AZURE_REPORT_FUNCTION_APP }}
+          package: edufeedback-report-function/target/azure-functions/${{ env.AZURE_REPORT_FUNCTION_APP }}
+
+      - name: Reiniciar as Function Apps
+        run: |
+          az functionapp restart \
+            --resource-group "${RESOURCE_GROUP}" \
+            --name "${AZURE_HTTP_FUNCTION_APP}"
+
+          az functionapp restart \
+            --resource-group "${RESOURCE_GROUP}" \
+            --name "${AZURE_NOTIFICATION_FUNCTION_APP}"
+
+          az functionapp restart \
+            --resource-group "${RESOURCE_GROUP}" \
+            --name "${AZURE_REPORT_FUNCTION_APP}"
+
+      - name: Mostrar situação das Function Apps
+        run: |
+          az functionapp list \
+            --resource-group "${RESOURCE_GROUP}" \
+            --query "[].{Nome:name, Estado:state, Host:defaultHostName}" \
+            --output table
+
+      - name: Logout do Azure
+        if: always()
+        run: az logout

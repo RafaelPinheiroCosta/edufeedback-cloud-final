@@ -1,0 +1,1035 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "metadata": {
+    "_generator": {
+      "name": "bicep",
+      "version": "0.45.15.27210",
+      "templateHash": "7730177159391161270"
+    }
+  },
+  "parameters": {
+    "location": {
+      "type": "string",
+      "defaultValue": "[resourceGroup().location]"
+    },
+    "environment": {
+      "type": "string",
+      "defaultValue": "prod"
+    },
+    "suffix": {
+      "type": "string",
+      "defaultValue": "rpc2026"
+    },
+    "storageName": {
+      "type": "string",
+      "defaultValue": "[format('stedufeedback{0}', parameters('suffix'))]"
+    },
+    "workspaceName": {
+      "type": "string",
+      "defaultValue": "[format('log-edufeedback-{0}', parameters('environment'))]"
+    },
+    "appInsightsName": {
+      "type": "string",
+      "defaultValue": "[format('appi-edufeedback-{0}', parameters('environment'))]"
+    },
+    "keyVaultName": {
+      "type": "string",
+      "defaultValue": "[format('kv-edufeedback-{0}', parameters('suffix'))]"
+    },
+    "postgresName": {
+      "type": "string",
+      "defaultValue": "[format('pg-edufeedback-{0}', parameters('suffix'))]"
+    },
+    "databaseName": {
+      "type": "string",
+      "defaultValue": "edufeedbackdb"
+    },
+    "databaseAdmin": {
+      "type": "string",
+      "defaultValue": "edufeedbackadmin"
+    },
+    "databaseAdminPassword": {
+      "type": "securestring"
+    },
+    "communicationName": {
+      "type": "string",
+      "defaultValue": "[format('acs-edufeedback-{0}', parameters('suffix'))]"
+    },
+    "emailServiceName": {
+      "type": "string",
+      "defaultValue": "[format('ecs-edufeedback-{0}', parameters('suffix'))]"
+    },
+    "functionPlanName": {
+      "type": "string",
+      "defaultValue": "[format('plan-edufeedback-{0}', parameters('environment'))]"
+    },
+    "httpFunctionName": {
+      "type": "string",
+      "defaultValue": "[format('func-edufeedback-http-{0}', parameters('suffix'))]"
+    },
+    "notificationFunctionName": {
+      "type": "string",
+      "defaultValue": "[format('func-edufeedback-notification-{0}', parameters('suffix'))]"
+    },
+    "reportFunctionName": {
+      "type": "string",
+      "defaultValue": "[format('func-edufeedback-report-{0}', parameters('suffix'))]"
+    },
+    "adminEmail": {
+      "type": "string"
+    }
+  },
+  "variables": {
+    "tags": {
+      "projeto": "edufeedback",
+      "ambiente": "[parameters('environment')]",
+      "gerenciadoPor": "bicep"
+    }
+  },
+  "resources": [
+    {
+      "type": "Microsoft.KeyVault/vaults/secrets",
+      "apiVersion": "2024-11-01",
+      "name": "[format('{0}/{1}', parameters('keyVaultName'), 'database-url')]",
+      "properties": {
+        "value": "[reference(resourceId('Microsoft.Resources/deployments', 'postgres'), '2025-04-01').outputs.jdbcUrl.value]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', 'keyvault')]",
+        "[resourceId('Microsoft.Resources/deployments', 'postgres')]"
+      ]
+    },
+    {
+      "type": "Microsoft.KeyVault/vaults/secrets",
+      "apiVersion": "2024-11-01",
+      "name": "[format('{0}/{1}', parameters('keyVaultName'), 'database-username')]",
+      "properties": {
+        "value": "[parameters('databaseAdmin')]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', 'keyvault')]"
+      ]
+    },
+    {
+      "type": "Microsoft.KeyVault/vaults/secrets",
+      "apiVersion": "2024-11-01",
+      "name": "[format('{0}/{1}', parameters('keyVaultName'), 'database-password')]",
+      "properties": {
+        "value": "[parameters('databaseAdminPassword')]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', 'keyvault')]"
+      ]
+    },
+    {
+      "type": "Microsoft.KeyVault/vaults/secrets",
+      "apiVersion": "2024-11-01",
+      "name": "[format('{0}/{1}', parameters('keyVaultName'), 'email-sender')]",
+      "properties": {
+        "value": "[reference(resourceId('Microsoft.Resources/deployments', 'communication'), '2025-04-01').outputs.senderAddress.value]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', 'communication')]",
+        "[resourceId('Microsoft.Resources/deployments', 'keyvault')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "storage",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "name": {
+            "value": "[parameters('storageName')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "keyVaultName": {
+            "value": "[parameters('keyVaultName')]"
+          },
+          "tags": {
+            "value": "[variables('tags')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.45.15.27210",
+              "templateHash": "9627004552082093267"
+            }
+          },
+          "parameters": {
+            "name": {
+              "type": "string"
+            },
+            "location": {
+              "type": "string"
+            },
+            "keyVaultName": {
+              "type": "string"
+            },
+            "tags": {
+              "type": "object"
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Storage/storageAccounts",
+              "apiVersion": "2025-06-01",
+              "name": "[parameters('name')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "sku": {
+                "name": "Standard_LRS"
+              },
+              "kind": "StorageV2",
+              "properties": {
+                "allowBlobPublicAccess": false,
+                "allowCrossTenantReplication": false,
+                "supportsHttpsTrafficOnly": true,
+                "minimumTlsVersion": "TLS1_2",
+                "publicNetworkAccess": "Enabled"
+              }
+            },
+            {
+              "type": "Microsoft.Storage/storageAccounts/queueServices",
+              "apiVersion": "2025-06-01",
+              "name": "[format('{0}/{1}', parameters('name'), 'default')]",
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', parameters('name'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Storage/storageAccounts/queueServices/queues",
+              "apiVersion": "2025-06-01",
+              "name": "[format('{0}/{1}/{2}', parameters('name'), 'default', 'feedback-critical-notifications')]",
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts/queueServices', parameters('name'), 'default')]"
+              ]
+            },
+            {
+              "type": "Microsoft.Storage/storageAccounts/queueServices/queues",
+              "apiVersion": "2025-06-01",
+              "name": "[format('{0}/{1}/{2}', parameters('name'), 'default', 'weekly-feedback-report')]",
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts/queueServices', parameters('name'), 'default')]"
+              ]
+            },
+            {
+              "type": "Microsoft.KeyVault/vaults/secrets",
+              "apiVersion": "2024-11-01",
+              "name": "[format('{0}/{1}', parameters('keyVaultName'), 'storage-connection-string')]",
+              "properties": {
+                "value": "[format('DefaultEndpointsProtocol=https;AccountName={0};AccountKey={1};EndpointSuffix={2}', parameters('name'), listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('name')), '2025-06-01').keys[0].value, environment().suffixes.storage)]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Storage/storageAccounts', parameters('name'))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "id": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Storage/storageAccounts', parameters('name'))]"
+            },
+            "name": {
+              "type": "string",
+              "value": "[parameters('name')]"
+            },
+            "connectionSecretUri": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.KeyVault/vaults/secrets', parameters('keyVaultName'), 'storage-connection-string'), '2024-11-01').secretUriWithVersion]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', 'keyvault')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "monitoring",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "workspaceName": {
+            "value": "[parameters('workspaceName')]"
+          },
+          "appInsightsName": {
+            "value": "[parameters('appInsightsName')]"
+          },
+          "tags": {
+            "value": "[variables('tags')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.45.15.27210",
+              "templateHash": "6170514143425115799"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string"
+            },
+            "workspaceName": {
+              "type": "string"
+            },
+            "appInsightsName": {
+              "type": "string"
+            },
+            "tags": {
+              "type": "object"
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.OperationalInsights/workspaces",
+              "apiVersion": "2025-07-01",
+              "name": "[parameters('workspaceName')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "features": {
+                  "enableLogAccessUsingOnlyResourcePermissions": true
+                },
+                "publicNetworkAccessForIngestion": "Enabled",
+                "publicNetworkAccessForQuery": "Enabled",
+                "retentionInDays": 30,
+                "sku": {
+                  "name": "PerGB2018"
+                }
+              }
+            },
+            {
+              "type": "Microsoft.Insights/components",
+              "apiVersion": "2020-02-02",
+              "name": "[parameters('appInsightsName')]",
+              "location": "[parameters('location')]",
+              "kind": "web",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "Application_Type": "web",
+                "IngestionMode": "LogAnalytics",
+                "WorkspaceResourceId": "[resourceId('Microsoft.OperationalInsights/workspaces', parameters('workspaceName'))]",
+                "RetentionInDays": 90,
+                "publicNetworkAccessForIngestion": "Enabled",
+                "publicNetworkAccessForQuery": "Enabled"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.OperationalInsights/workspaces', parameters('workspaceName'))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "workspaceId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.OperationalInsights/workspaces', parameters('workspaceName'))]"
+            },
+            "appInsightsId": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Insights/components', parameters('appInsightsName'))]"
+            },
+            "connectionString": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Insights/components', parameters('appInsightsName')), '2020-02-02').ConnectionString]"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "keyvault",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "name": {
+            "value": "[parameters('keyVaultName')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "tenantId": {
+            "value": "[tenant().tenantId]"
+          },
+          "tags": {
+            "value": "[variables('tags')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.45.15.27210",
+              "templateHash": "8065515531028072760"
+            }
+          },
+          "parameters": {
+            "name": {
+              "type": "string"
+            },
+            "location": {
+              "type": "string"
+            },
+            "tenantId": {
+              "type": "string"
+            },
+            "tags": {
+              "type": "object"
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.KeyVault/vaults",
+              "apiVersion": "2024-11-01",
+              "name": "[parameters('name')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "tenantId": "[parameters('tenantId')]",
+                "sku": {
+                  "family": "A",
+                  "name": "standard"
+                },
+                "enableRbacAuthorization": true,
+                "enableSoftDelete": true,
+                "softDeleteRetentionInDays": 90,
+                "publicNetworkAccess": "Enabled"
+              }
+            }
+          ],
+          "outputs": {
+            "id": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.KeyVault/vaults', parameters('name'))]"
+            },
+            "name": {
+              "type": "string",
+              "value": "[parameters('name')]"
+            },
+            "uri": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.KeyVault/vaults', parameters('name')), '2024-11-01').vaultUri]"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "postgres",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "name": {
+            "value": "[parameters('postgresName')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "databaseName": {
+            "value": "[parameters('databaseName')]"
+          },
+          "administratorLogin": {
+            "value": "[parameters('databaseAdmin')]"
+          },
+          "administratorPassword": {
+            "value": "[parameters('databaseAdminPassword')]"
+          },
+          "tags": {
+            "value": "[variables('tags')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.45.15.27210",
+              "templateHash": "415498516526978940"
+            }
+          },
+          "parameters": {
+            "name": {
+              "type": "string"
+            },
+            "location": {
+              "type": "string"
+            },
+            "databaseName": {
+              "type": "string"
+            },
+            "administratorLogin": {
+              "type": "string"
+            },
+            "administratorPassword": {
+              "type": "securestring"
+            },
+            "tags": {
+              "type": "object"
+            },
+            "allowAzureServices": {
+              "type": "bool",
+              "defaultValue": true
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.DBforPostgreSQL/flexibleServers",
+              "apiVersion": "2025-08-01",
+              "name": "[parameters('name')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "sku": {
+                "name": "Standard_B1ms",
+                "tier": "Burstable"
+              },
+              "properties": {
+                "administratorLogin": "[parameters('administratorLogin')]",
+                "administratorLoginPassword": "[parameters('administratorPassword')]",
+                "version": "16",
+                "authConfig": {
+                  "activeDirectoryAuth": "Disabled",
+                  "passwordAuth": "Enabled"
+                },
+                "backup": {
+                  "backupRetentionDays": 7,
+                  "geoRedundantBackup": "Disabled"
+                },
+                "highAvailability": {
+                  "mode": "Disabled"
+                },
+                "network": {
+                  "publicNetworkAccess": "Enabled"
+                },
+                "storage": {
+                  "autoGrow": "Enabled",
+                  "storageSizeGB": 32,
+                  "tier": "P4"
+                }
+              }
+            },
+            {
+              "type": "Microsoft.DBforPostgreSQL/flexibleServers/databases",
+              "apiVersion": "2025-08-01",
+              "name": "[format('{0}/{1}', parameters('name'), parameters('databaseName'))]",
+              "properties": {
+                "charset": "UTF8",
+                "collation": "en_US.utf8"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers', parameters('name'))]"
+              ]
+            },
+            {
+              "condition": "[parameters('allowAzureServices')]",
+              "type": "Microsoft.DBforPostgreSQL/flexibleServers/firewallRules",
+              "apiVersion": "2025-08-01",
+              "name": "[format('{0}/{1}', parameters('name'), 'AllowAzureServices')]",
+              "properties": {
+                "startIpAddress": "0.0.0.0",
+                "endIpAddress": "0.0.0.0"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers', parameters('name'))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "id": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.DBforPostgreSQL/flexibleServers', parameters('name'))]"
+            },
+            "fqdn": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.DBforPostgreSQL/flexibleServers', parameters('name')), '2025-08-01').fullyQualifiedDomainName]"
+            },
+            "jdbcUrl": {
+              "type": "string",
+              "value": "[format('jdbc:postgresql://{0}:5432/{1}?sslmode=require', reference(resourceId('Microsoft.DBforPostgreSQL/flexibleServers', parameters('name')), '2025-08-01').fullyQualifiedDomainName, parameters('databaseName'))]"
+            }
+          }
+        }
+      }
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "communication",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "communicationName": {
+            "value": "[parameters('communicationName')]"
+          },
+          "emailServiceName": {
+            "value": "[parameters('emailServiceName')]"
+          },
+          "keyVaultName": {
+            "value": "[parameters('keyVaultName')]"
+          },
+          "tags": {
+            "value": "[variables('tags')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.45.15.27210",
+              "templateHash": "18273437376458434799"
+            }
+          },
+          "parameters": {
+            "communicationName": {
+              "type": "string"
+            },
+            "emailServiceName": {
+              "type": "string"
+            },
+            "keyVaultName": {
+              "type": "string"
+            },
+            "dataLocation": {
+              "type": "string",
+              "defaultValue": "Brazil"
+            },
+            "tags": {
+              "type": "object"
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Communication/emailServices",
+              "apiVersion": "2025-09-01",
+              "name": "[parameters('emailServiceName')]",
+              "location": "global",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "dataLocation": "[parameters('dataLocation')]"
+              }
+            },
+            {
+              "type": "Microsoft.Communication/emailServices/domains",
+              "apiVersion": "2025-09-01",
+              "name": "[format('{0}/{1}', parameters('emailServiceName'), 'AzureManagedDomain')]",
+              "location": "global",
+              "properties": {
+                "domainManagement": "AzureManaged",
+                "userEngagementTracking": "Disabled"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Communication/emailServices', parameters('emailServiceName'))]"
+              ]
+            },
+            {
+              "type": "Microsoft.Communication/emailServices/domains/senderUsernames",
+              "apiVersion": "2025-09-01",
+              "name": "[format('{0}/{1}/{2}', parameters('emailServiceName'), 'AzureManagedDomain', 'DoNotReply')]",
+              "properties": {
+                "username": "DoNotReply",
+                "displayName": "EduFeedback"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Communication/emailServices/domains', parameters('emailServiceName'), 'AzureManagedDomain')]"
+              ]
+            },
+            {
+              "type": "Microsoft.Communication/communicationServices",
+              "apiVersion": "2025-09-01",
+              "name": "[parameters('communicationName')]",
+              "location": "global",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "dataLocation": "[parameters('dataLocation')]",
+                "disableLocalAuth": false,
+                "linkedDomains": [
+                  "[resourceId('Microsoft.Communication/emailServices/domains', parameters('emailServiceName'), 'AzureManagedDomain')]"
+                ],
+                "publicNetworkAccess": "Enabled"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Communication/emailServices/domains', parameters('emailServiceName'), 'AzureManagedDomain')]"
+              ]
+            },
+            {
+              "type": "Microsoft.KeyVault/vaults/secrets",
+              "apiVersion": "2024-11-01",
+              "name": "[format('{0}/{1}', parameters('keyVaultName'), 'communication-connection-string')]",
+              "properties": {
+                "value": "[listKeys(resourceId('Microsoft.Communication/communicationServices', parameters('communicationName')), '2025-09-01').primaryConnectionString]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Communication/communicationServices', parameters('communicationName'))]"
+              ]
+            }
+          ],
+          "outputs": {
+            "id": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.Communication/communicationServices', parameters('communicationName'))]"
+            },
+            "connectionSecretUri": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.KeyVault/vaults/secrets', parameters('keyVaultName'), 'communication-connection-string'), '2024-11-01').secretUriWithVersion]"
+            },
+            "senderDomain": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.Communication/emailServices/domains', parameters('emailServiceName'), 'AzureManagedDomain'), '2025-09-01').mailFromSenderDomain]"
+            },
+            "senderAddress": {
+              "type": "string",
+              "value": "[format('DoNotReply@{0}', reference(resourceId('Microsoft.Communication/emailServices/domains', parameters('emailServiceName'), 'AzureManagedDomain'), '2025-09-01').mailFromSenderDomain)]"
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', 'keyvault')]"
+      ]
+    },
+    {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "functions",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "planName": {
+            "value": "[parameters('functionPlanName')]"
+          },
+          "storageConnectionSecretUri": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'storage'), '2025-04-01').outputs.connectionSecretUri.value]"
+          },
+          "databaseUrlSecretUri": {
+            "value": "[reference(resourceId('Microsoft.KeyVault/vaults/secrets', parameters('keyVaultName'), 'database-url'), '2024-11-01').secretUriWithVersion]"
+          },
+          "databaseUserSecretUri": {
+            "value": "[reference(resourceId('Microsoft.KeyVault/vaults/secrets', parameters('keyVaultName'), 'database-username'), '2024-11-01').secretUriWithVersion]"
+          },
+          "databasePasswordSecretUri": {
+            "value": "[reference(resourceId('Microsoft.KeyVault/vaults/secrets', parameters('keyVaultName'), 'database-password'), '2024-11-01').secretUriWithVersion]"
+          },
+          "communicationConnectionSecretUri": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'communication'), '2025-04-01').outputs.connectionSecretUri.value]"
+          },
+          "emailSenderSecretUri": {
+            "value": "[reference(resourceId('Microsoft.KeyVault/vaults/secrets', parameters('keyVaultName'), 'email-sender'), '2024-11-01').secretUriWithVersion]"
+          },
+          "appInsightsConnectionString": {
+            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'monitoring'), '2025-04-01').outputs.connectionString.value]"
+          },
+          "keyVaultName": {
+            "value": "[parameters('keyVaultName')]"
+          },
+          "adminEmail": {
+            "value": "[parameters('adminEmail')]"
+          },
+          "tags": {
+            "value": "[variables('tags')]"
+          },
+          "apps": {
+            "value": [
+              {
+                "name": "[parameters('httpFunctionName')]",
+                "component": "http",
+                "appNameSetting": "AZURE_HTTP_FUNCTION_APP"
+              },
+              {
+                "name": "[parameters('notificationFunctionName')]",
+                "component": "notification",
+                "appNameSetting": "AZURE_NOTIFICATION_FUNCTION_APP"
+              },
+              {
+                "name": "[parameters('reportFunctionName')]",
+                "component": "report",
+                "appNameSetting": "AZURE_REPORT_FUNCTION_APP"
+              }
+            ]
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.45.15.27210",
+              "templateHash": "8812176406537186099"
+            }
+          },
+          "parameters": {
+            "location": {
+              "type": "string"
+            },
+            "planName": {
+              "type": "string"
+            },
+            "storageConnectionSecretUri": {
+              "type": "string"
+            },
+            "databaseUrlSecretUri": {
+              "type": "string"
+            },
+            "databaseUserSecretUri": {
+              "type": "string"
+            },
+            "databasePasswordSecretUri": {
+              "type": "string"
+            },
+            "communicationConnectionSecretUri": {
+              "type": "string"
+            },
+            "emailSenderSecretUri": {
+              "type": "string"
+            },
+            "appInsightsConnectionString": {
+              "type": "string"
+            },
+            "keyVaultName": {
+              "type": "string"
+            },
+            "adminEmail": {
+              "type": "string"
+            },
+            "tags": {
+              "type": "object"
+            },
+            "apps": {
+              "type": "array"
+            }
+          },
+          "variables": {
+            "keyVaultSecretsUserRoleId": "4633458b-17de-408a-b874-0445c86b69e6"
+          },
+          "resources": [
+            {
+              "type": "Microsoft.Web/serverfarms",
+              "apiVersion": "2024-11-01",
+              "name": "[parameters('planName')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "kind": "linux",
+              "sku": {
+                "name": "Y1",
+                "tier": "Dynamic"
+              },
+              "properties": {
+                "reserved": true
+              }
+            },
+            {
+              "copy": {
+                "name": "functions",
+                "count": "[length(parameters('apps'))]"
+              },
+              "type": "Microsoft.Web/sites",
+              "apiVersion": "2024-11-01",
+              "name": "[parameters('apps')[copyIndex()].name]",
+              "location": "[parameters('location')]",
+              "tags": "[union(parameters('tags'), createObject('componente', parameters('apps')[copyIndex()].component))]",
+              "kind": "functionapp,linux",
+              "identity": {
+                "type": "SystemAssigned"
+              },
+              "properties": {
+                "serverFarmId": "[resourceId('Microsoft.Web/serverfarms', parameters('planName'))]",
+                "httpsOnly": true,
+                "publicNetworkAccess": "Enabled",
+                "siteConfig": {
+                  "alwaysOn": false,
+                  "ftpsState": "Disabled",
+                  "http20Enabled": true,
+                  "minTlsVersion": "1.2",
+                  "linuxFxVersion": "Java|21",
+                  "appSettings": [
+                    {
+                      "name": "FUNCTIONS_EXTENSION_VERSION",
+                      "value": "~4"
+                    },
+                    {
+                      "name": "FUNCTIONS_WORKER_RUNTIME",
+                      "value": "java"
+                    },
+                    {
+                      "name": "WEBSITE_RUN_FROM_PACKAGE",
+                      "value": "1"
+                    },
+                    {
+                      "name": "QUARKUS_PROFILE",
+                      "value": "prod"
+                    },
+                    {
+                      "name": "APPLICATIONINSIGHTS_CONNECTION_STRING",
+                      "value": "[parameters('appInsightsConnectionString')]"
+                    },
+                    {
+                      "name": "AzureWebJobsStorage",
+                      "value": "[format('@Microsoft.KeyVault(SecretUri={0})', parameters('storageConnectionSecretUri'))]"
+                    },
+                    {
+                      "name": "AZURE_STORAGE_CONNECTION_STRING",
+                      "value": "[format('@Microsoft.KeyVault(SecretUri={0})', parameters('storageConnectionSecretUri'))]"
+                    },
+                    {
+                      "name": "DATABASE_URL",
+                      "value": "[format('@Microsoft.KeyVault(SecretUri={0})', parameters('databaseUrlSecretUri'))]"
+                    },
+                    {
+                      "name": "DATABASE_USERNAME",
+                      "value": "[format('@Microsoft.KeyVault(SecretUri={0})', parameters('databaseUserSecretUri'))]"
+                    },
+                    {
+                      "name": "DATABASE_PASSWORD",
+                      "value": "[format('@Microsoft.KeyVault(SecretUri={0})', parameters('databasePasswordSecretUri'))]"
+                    },
+                    {
+                      "name": "AZURE_COMMUNICATION_CONNECTION_STRING",
+                      "value": "[format('@Microsoft.KeyVault(SecretUri={0})', parameters('communicationConnectionSecretUri'))]"
+                    },
+                    {
+                      "name": "EMAIL_SENDER",
+                      "value": "[format('@Microsoft.KeyVault(SecretUri={0})', parameters('emailSenderSecretUri'))]"
+                    },
+                    {
+                      "name": "ADMIN_EMAIL",
+                      "value": "[parameters('adminEmail')]"
+                    },
+                    {
+                      "name": "QUEUE_NAME",
+                      "value": "feedback-critical-notifications"
+                    },
+                    {
+                      "name": "APP_TIMEZONE",
+                      "value": "America/Sao_Paulo"
+                    },
+                    {
+                      "name": "[parameters('apps')[copyIndex()].appNameSetting]",
+                      "value": "[parameters('apps')[copyIndex()].name]"
+                    }
+                  ]
+                }
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Web/serverfarms', parameters('planName'))]"
+              ]
+            },
+            {
+              "copy": {
+                "name": "keyVaultReader",
+                "count": "[length(parameters('apps'))]"
+              },
+              "type": "Microsoft.Authorization/roleAssignments",
+              "apiVersion": "2022-04-01",
+              "scope": "[resourceId('Microsoft.KeyVault/vaults', parameters('keyVaultName'))]",
+              "name": "[guid(resourceGroup().id, parameters('keyVaultName'), parameters('apps')[copyIndex()].name, variables('keyVaultSecretsUserRoleId'))]",
+              "properties": {
+                "principalId": "[reference(resourceId('Microsoft.Web/sites', parameters('apps')[copyIndex()].name), '2024-11-01', 'full').identity.principalId]",
+                "principalType": "ServicePrincipal",
+                "roleDefinitionId": "[subscriptionResourceId('Microsoft.Authorization/roleDefinitions', variables('keyVaultSecretsUserRoleId'))]"
+              },
+              "dependsOn": [
+                "[resourceId('Microsoft.Web/sites', parameters('apps')[copyIndex()].name)]"
+              ]
+            }
+          ],
+          "outputs": {
+            "names": {
+              "type": "array",
+              "copy": {
+                "count": "[length(parameters('apps'))]",
+                "input": "[parameters('apps')[copyIndex()].name]"
+              }
+            },
+            "principalIds": {
+              "type": "array",
+              "copy": {
+                "count": "[length(parameters('apps'))]",
+                "input": "[reference(resourceId('Microsoft.Web/sites', parameters('apps')[copyIndex()].name), '2024-11-01', 'full').identity.principalId]"
+              }
+            }
+          }
+        }
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Resources/deployments', 'communication')]",
+        "[resourceId('Microsoft.KeyVault/vaults/secrets', parameters('keyVaultName'), 'database-password')]",
+        "[resourceId('Microsoft.KeyVault/vaults/secrets', parameters('keyVaultName'), 'database-url')]",
+        "[resourceId('Microsoft.KeyVault/vaults/secrets', parameters('keyVaultName'), 'database-username')]",
+        "[resourceId('Microsoft.KeyVault/vaults/secrets', parameters('keyVaultName'), 'email-sender')]",
+        "[resourceId('Microsoft.Resources/deployments', 'monitoring')]",
+        "[resourceId('Microsoft.Resources/deployments', 'storage')]"
+      ]
+    }
+  ],
+  "outputs": {
+    "storageAccountName": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'storage'), '2025-04-01').outputs.name.value]"
+    },
+    "keyVaultUri": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'keyvault'), '2025-04-01').outputs.uri.value]"
+    },
+    "postgresFqdn": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'postgres'), '2025-04-01').outputs.fqdn.value]"
+    },
+    "communicationServiceName": {
+      "type": "string",
+      "value": "[parameters('communicationName')]"
+    },
+    "emailSender": {
+      "type": "string",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'communication'), '2025-04-01').outputs.senderAddress.value]"
+    },
+    "functionApps": {
+      "type": "array",
+      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'functions'), '2025-04-01').outputs.names.value]"
+    }
+  }
+}

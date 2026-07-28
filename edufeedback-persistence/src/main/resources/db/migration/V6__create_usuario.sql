@@ -1,0 +1,11 @@
+CREATE TABLE edufeedback.usuario (
+  id UUID PRIMARY KEY,
+  username VARCHAR(100) NOT NULL,
+  password_hash VARCHAR(100) NOT NULL,
+  role VARCHAR(50) NOT NULL,
+  ativo BOOLEAN NOT NULL DEFAULT TRUE,
+  criado_em TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  atualizado_em TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT uk_usuario_username UNIQUE(username),
+  CONSTRAINT ck_usuario_role CHECK (role IN ('ADMIN'))
+);
