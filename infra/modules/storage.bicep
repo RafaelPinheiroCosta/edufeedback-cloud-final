@@ -7,7 +7,9 @@ resource account 'Microsoft.Storage/storageAccounts@2025-06-01' = {
   name: name
   location: location
   tags: tags
-  sku: { name: 'Standard_LRS' }
+  sku: {
+    name: 'Standard_LRS'
+  }
   kind: 'StorageV2'
   properties: {
     allowBlobPublicAccess: false
@@ -38,6 +40,7 @@ resource vault 'Microsoft.KeyVault/vaults@2024-11-01' existing = {
 }
 
 var storageKey = account.listKeys().keys[0].value
+
 var connectionString = 'DefaultEndpointsProtocol=https;AccountName=${account.name};AccountKey=${storageKey};EndpointSuffix=${environment().suffixes.storage}'
 
 resource storageSecret 'Microsoft.KeyVault/vaults/secrets@2024-11-01' = {
@@ -51,3 +54,6 @@ resource storageSecret 'Microsoft.KeyVault/vaults/secrets@2024-11-01' = {
 output id string = account.id
 output name string = account.name
 output connectionSecretUri string = storageSecret.properties.secretUriWithVersion
+
+@secure()
+output connectionString string = connectionString
