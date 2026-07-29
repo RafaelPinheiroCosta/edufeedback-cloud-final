@@ -1,11 +1,12 @@
 {
   "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "languageVersion": "2.0",
   "contentVersion": "1.0.0.0",
   "metadata": {
     "_generator": {
       "name": "bicep",
       "version": "0.45.15.27210",
-      "templateHash": "7730177159391161270"
+      "templateHash": "7647708223776410056"
     }
   },
   "parameters": {
@@ -87,20 +88,26 @@
       "gerenciadoPor": "bicep"
     }
   },
-  "resources": [
-    {
+  "resources": {
+    "vault": {
+      "existing": true,
+      "type": "Microsoft.KeyVault/vaults",
+      "apiVersion": "2024-11-01",
+      "name": "[parameters('keyVaultName')]"
+    },
+    "databaseUrlSecret": {
       "type": "Microsoft.KeyVault/vaults/secrets",
       "apiVersion": "2024-11-01",
       "name": "[format('{0}/{1}', parameters('keyVaultName'), 'database-url')]",
       "properties": {
-        "value": "[reference(resourceId('Microsoft.Resources/deployments', 'postgres'), '2025-04-01').outputs.jdbcUrl.value]"
+        "value": "[reference('postgres').outputs.jdbcUrl.value]"
       },
       "dependsOn": [
-        "[resourceId('Microsoft.Resources/deployments', 'keyvault')]",
-        "[resourceId('Microsoft.Resources/deployments', 'postgres')]"
+        "keyVault",
+        "postgres"
       ]
     },
-    {
+    "databaseUserSecret": {
       "type": "Microsoft.KeyVault/vaults/secrets",
       "apiVersion": "2024-11-01",
       "name": "[format('{0}/{1}', parameters('keyVaultName'), 'database-username')]",
@@ -108,10 +115,10 @@
         "value": "[parameters('databaseAdmin')]"
       },
       "dependsOn": [
-        "[resourceId('Microsoft.Resources/deployments', 'keyvault')]"
+        "keyVault"
       ]
     },
-    {
+    "databasePasswordSecret": {
       "type": "Microsoft.KeyVault/vaults/secrets",
       "apiVersion": "2024-11-01",
       "name": "[format('{0}/{1}', parameters('keyVaultName'), 'database-password')]",
@@ -119,22 +126,106 @@
         "value": "[parameters('databaseAdminPassword')]"
       },
       "dependsOn": [
-        "[resourceId('Microsoft.Resources/deployments', 'keyvault')]"
+        "keyVault"
       ]
     },
-    {
+    "emailSenderSecret": {
       "type": "Microsoft.KeyVault/vaults/secrets",
       "apiVersion": "2024-11-01",
       "name": "[format('{0}/{1}', parameters('keyVaultName'), 'email-sender')]",
       "properties": {
-        "value": "[reference(resourceId('Microsoft.Resources/deployments', 'communication'), '2025-04-01').outputs.senderAddress.value]"
+        "value": "[reference('communication').outputs.senderAddress.value]"
       },
       "dependsOn": [
-        "[resourceId('Microsoft.Resources/deployments', 'communication')]",
-        "[resourceId('Microsoft.Resources/deployments', 'keyvault')]"
+        "communication",
+        "keyVault"
       ]
     },
-    {
+    "keyVault": {
+      "type": "Microsoft.Resources/deployments",
+      "apiVersion": "2025-04-01",
+      "name": "keyvault",
+      "properties": {
+        "expressionEvaluationOptions": {
+          "scope": "inner"
+        },
+        "mode": "Incremental",
+        "parameters": {
+          "name": {
+            "value": "[parameters('keyVaultName')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "tenantId": {
+            "value": "[tenant().tenantId]"
+          },
+          "tags": {
+            "value": "[variables('tags')]"
+          }
+        },
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "metadata": {
+            "_generator": {
+              "name": "bicep",
+              "version": "0.45.15.27210",
+              "templateHash": "8065515531028072760"
+            }
+          },
+          "parameters": {
+            "name": {
+              "type": "string"
+            },
+            "location": {
+              "type": "string"
+            },
+            "tenantId": {
+              "type": "string"
+            },
+            "tags": {
+              "type": "object"
+            }
+          },
+          "resources": [
+            {
+              "type": "Microsoft.KeyVault/vaults",
+              "apiVersion": "2024-11-01",
+              "name": "[parameters('name')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('tags')]",
+              "properties": {
+                "tenantId": "[parameters('tenantId')]",
+                "sku": {
+                  "family": "A",
+                  "name": "standard"
+                },
+                "enableRbacAuthorization": true,
+                "enableSoftDelete": true,
+                "softDeleteRetentionInDays": 90,
+                "publicNetworkAccess": "Enabled"
+              }
+            }
+          ],
+          "outputs": {
+            "id": {
+              "type": "string",
+              "value": "[resourceId('Microsoft.KeyVault/vaults', parameters('name'))]"
+            },
+            "name": {
+              "type": "string",
+              "value": "[parameters('name')]"
+            },
+            "uri": {
+              "type": "string",
+              "value": "[reference(resourceId('Microsoft.KeyVault/vaults', parameters('name')), '2024-11-01').vaultUri]"
+            }
+          }
+        }
+      }
+    },
+    "storage": {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
       "name": "storage",
@@ -159,12 +250,13 @@
         },
         "template": {
           "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "languageVersion": "2.0",
           "contentVersion": "1.0.0.0",
           "metadata": {
             "_generator": {
               "name": "bicep",
               "version": "0.45.15.27210",
-              "templateHash": "9627004552082093267"
+              "templateHash": "8600516076692031684"
             }
           },
           "parameters": {
@@ -181,8 +273,8 @@
               "type": "object"
             }
           },
-          "resources": [
-            {
+          "resources": {
+            "account": {
               "type": "Microsoft.Storage/storageAccounts",
               "apiVersion": "2025-06-01",
               "name": "[parameters('name')]",
@@ -200,42 +292,48 @@
                 "publicNetworkAccess": "Enabled"
               }
             },
-            {
+            "queueService": {
               "type": "Microsoft.Storage/storageAccounts/queueServices",
               "apiVersion": "2025-06-01",
               "name": "[format('{0}/{1}', parameters('name'), 'default')]",
               "dependsOn": [
-                "[resourceId('Microsoft.Storage/storageAccounts', parameters('name'))]"
+                "account"
               ]
             },
-            {
+            "criticalQueue": {
               "type": "Microsoft.Storage/storageAccounts/queueServices/queues",
               "apiVersion": "2025-06-01",
               "name": "[format('{0}/{1}/{2}', parameters('name'), 'default', 'feedback-critical-notifications')]",
               "dependsOn": [
-                "[resourceId('Microsoft.Storage/storageAccounts/queueServices', parameters('name'), 'default')]"
+                "queueService"
               ]
             },
-            {
+            "weeklyQueue": {
               "type": "Microsoft.Storage/storageAccounts/queueServices/queues",
               "apiVersion": "2025-06-01",
               "name": "[format('{0}/{1}/{2}', parameters('name'), 'default', 'weekly-feedback-report')]",
               "dependsOn": [
-                "[resourceId('Microsoft.Storage/storageAccounts/queueServices', parameters('name'), 'default')]"
+                "queueService"
               ]
             },
-            {
+            "vault": {
+              "existing": true,
+              "type": "Microsoft.KeyVault/vaults",
+              "apiVersion": "2024-11-01",
+              "name": "[parameters('keyVaultName')]"
+            },
+            "storageSecret": {
               "type": "Microsoft.KeyVault/vaults/secrets",
               "apiVersion": "2024-11-01",
               "name": "[format('{0}/{1}', parameters('keyVaultName'), 'storage-connection-string')]",
               "properties": {
-                "value": "[format('DefaultEndpointsProtocol=https;AccountName={0};AccountKey={1};EndpointSuffix={2}', parameters('name'), listKeys(resourceId('Microsoft.Storage/storageAccounts', parameters('name')), '2025-06-01').keys[0].value, environment().suffixes.storage)]"
+                "value": "[format('DefaultEndpointsProtocol=https;AccountName={0};AccountKey={1};EndpointSuffix={2}', parameters('name'), listKeys('account', '2025-06-01').keys[0].value, environment().suffixes.storage)]"
               },
               "dependsOn": [
-                "[resourceId('Microsoft.Storage/storageAccounts', parameters('name'))]"
+                "account"
               ]
             }
-          ],
+          },
           "outputs": {
             "id": {
               "type": "string",
@@ -247,16 +345,20 @@
             },
             "connectionSecretUri": {
               "type": "string",
-              "value": "[reference(resourceId('Microsoft.KeyVault/vaults/secrets', parameters('keyVaultName'), 'storage-connection-string'), '2024-11-01').secretUriWithVersion]"
+              "value": "[reference('storageSecret').secretUriWithVersion]"
+            },
+            "connectionString": {
+              "type": "securestring",
+              "value": "[format('DefaultEndpointsProtocol=https;AccountName={0};AccountKey={1};EndpointSuffix={2}', parameters('name'), listKeys('account', '2025-06-01').keys[0].value, environment().suffixes.storage)]"
             }
           }
         }
       },
       "dependsOn": [
-        "[resourceId('Microsoft.Resources/deployments', 'keyvault')]"
+        "keyVault"
       ]
     },
-    {
+    "monitoring": {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
       "name": "monitoring",
@@ -359,91 +461,7 @@
         }
       }
     },
-    {
-      "type": "Microsoft.Resources/deployments",
-      "apiVersion": "2025-04-01",
-      "name": "keyvault",
-      "properties": {
-        "expressionEvaluationOptions": {
-          "scope": "inner"
-        },
-        "mode": "Incremental",
-        "parameters": {
-          "name": {
-            "value": "[parameters('keyVaultName')]"
-          },
-          "location": {
-            "value": "[parameters('location')]"
-          },
-          "tenantId": {
-            "value": "[tenant().tenantId]"
-          },
-          "tags": {
-            "value": "[variables('tags')]"
-          }
-        },
-        "template": {
-          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
-          "contentVersion": "1.0.0.0",
-          "metadata": {
-            "_generator": {
-              "name": "bicep",
-              "version": "0.45.15.27210",
-              "templateHash": "8065515531028072760"
-            }
-          },
-          "parameters": {
-            "name": {
-              "type": "string"
-            },
-            "location": {
-              "type": "string"
-            },
-            "tenantId": {
-              "type": "string"
-            },
-            "tags": {
-              "type": "object"
-            }
-          },
-          "resources": [
-            {
-              "type": "Microsoft.KeyVault/vaults",
-              "apiVersion": "2024-11-01",
-              "name": "[parameters('name')]",
-              "location": "[parameters('location')]",
-              "tags": "[parameters('tags')]",
-              "properties": {
-                "tenantId": "[parameters('tenantId')]",
-                "sku": {
-                  "family": "A",
-                  "name": "standard"
-                },
-                "enableRbacAuthorization": true,
-                "enableSoftDelete": true,
-                "softDeleteRetentionInDays": 90,
-                "publicNetworkAccess": "Enabled"
-              }
-            }
-          ],
-          "outputs": {
-            "id": {
-              "type": "string",
-              "value": "[resourceId('Microsoft.KeyVault/vaults', parameters('name'))]"
-            },
-            "name": {
-              "type": "string",
-              "value": "[parameters('name')]"
-            },
-            "uri": {
-              "type": "string",
-              "value": "[reference(resourceId('Microsoft.KeyVault/vaults', parameters('name')), '2024-11-01').vaultUri]"
-            }
-          }
-        }
-      }
-    },
-    {
+    "postgres": {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
       "name": "postgres",
@@ -585,7 +603,7 @@
         }
       }
     },
-    {
+    "communication": {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
       "name": "communication",
@@ -723,10 +741,10 @@
         }
       },
       "dependsOn": [
-        "[resourceId('Microsoft.Resources/deployments', 'keyvault')]"
+        "keyVault"
       ]
     },
-    {
+    "functions": {
       "type": "Microsoft.Resources/deployments",
       "apiVersion": "2025-04-01",
       "name": "functions",
@@ -742,26 +760,29 @@
           "planName": {
             "value": "[parameters('functionPlanName')]"
           },
+          "storageConnectionString": {
+            "value": "[listOutputsWithSecureValues('storage', '2025-04-01').connectionString]"
+          },
           "storageConnectionSecretUri": {
-            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'storage'), '2025-04-01').outputs.connectionSecretUri.value]"
+            "value": "[reference('storage').outputs.connectionSecretUri.value]"
           },
           "databaseUrlSecretUri": {
-            "value": "[reference(resourceId('Microsoft.KeyVault/vaults/secrets', parameters('keyVaultName'), 'database-url'), '2024-11-01').secretUriWithVersion]"
+            "value": "[reference('databaseUrlSecret').secretUriWithVersion]"
           },
           "databaseUserSecretUri": {
-            "value": "[reference(resourceId('Microsoft.KeyVault/vaults/secrets', parameters('keyVaultName'), 'database-username'), '2024-11-01').secretUriWithVersion]"
+            "value": "[reference('databaseUserSecret').secretUriWithVersion]"
           },
           "databasePasswordSecretUri": {
-            "value": "[reference(resourceId('Microsoft.KeyVault/vaults/secrets', parameters('keyVaultName'), 'database-password'), '2024-11-01').secretUriWithVersion]"
+            "value": "[reference('databasePasswordSecret').secretUriWithVersion]"
           },
           "communicationConnectionSecretUri": {
-            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'communication'), '2025-04-01').outputs.connectionSecretUri.value]"
+            "value": "[reference('communication').outputs.connectionSecretUri.value]"
           },
           "emailSenderSecretUri": {
-            "value": "[reference(resourceId('Microsoft.KeyVault/vaults/secrets', parameters('keyVaultName'), 'email-sender'), '2024-11-01').secretUriWithVersion]"
+            "value": "[reference('emailSenderSecret').secretUriWithVersion]"
           },
           "appInsightsConnectionString": {
-            "value": "[reference(resourceId('Microsoft.Resources/deployments', 'monitoring'), '2025-04-01').outputs.connectionString.value]"
+            "value": "[reference('monitoring').outputs.connectionString.value]"
           },
           "keyVaultName": {
             "value": "[parameters('keyVaultName')]"
@@ -799,7 +820,7 @@
             "_generator": {
               "name": "bicep",
               "version": "0.45.15.27210",
-              "templateHash": "8812176406537186099"
+              "templateHash": "1339364851172652724"
             }
           },
           "parameters": {
@@ -808,6 +829,9 @@
             },
             "planName": {
               "type": "string"
+            },
+            "storageConnectionString": {
+              "type": "securestring"
             },
             "storageConnectionSecretUri": {
               "type": "string"
@@ -909,7 +933,7 @@
                     },
                     {
                       "name": "AzureWebJobsStorage",
-                      "value": "[format('@Microsoft.KeyVault(SecretUri={0})', parameters('storageConnectionSecretUri'))]"
+                      "value": "[parameters('storageConnectionString')]"
                     },
                     {
                       "name": "AZURE_STORAGE_CONNECTION_STRING",
@@ -996,28 +1020,28 @@
         }
       },
       "dependsOn": [
-        "[resourceId('Microsoft.Resources/deployments', 'communication')]",
-        "[resourceId('Microsoft.KeyVault/vaults/secrets', parameters('keyVaultName'), 'database-password')]",
-        "[resourceId('Microsoft.KeyVault/vaults/secrets', parameters('keyVaultName'), 'database-url')]",
-        "[resourceId('Microsoft.KeyVault/vaults/secrets', parameters('keyVaultName'), 'database-username')]",
-        "[resourceId('Microsoft.KeyVault/vaults/secrets', parameters('keyVaultName'), 'email-sender')]",
-        "[resourceId('Microsoft.Resources/deployments', 'monitoring')]",
-        "[resourceId('Microsoft.Resources/deployments', 'storage')]"
+        "communication",
+        "databasePasswordSecret",
+        "databaseUrlSecret",
+        "databaseUserSecret",
+        "emailSenderSecret",
+        "monitoring",
+        "storage"
       ]
     }
-  ],
+  },
   "outputs": {
     "storageAccountName": {
       "type": "string",
-      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'storage'), '2025-04-01').outputs.name.value]"
+      "value": "[reference('storage').outputs.name.value]"
     },
     "keyVaultUri": {
       "type": "string",
-      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'keyvault'), '2025-04-01').outputs.uri.value]"
+      "value": "[reference('keyVault').outputs.uri.value]"
     },
     "postgresFqdn": {
       "type": "string",
-      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'postgres'), '2025-04-01').outputs.fqdn.value]"
+      "value": "[reference('postgres').outputs.fqdn.value]"
     },
     "communicationServiceName": {
       "type": "string",
@@ -1025,11 +1049,11 @@
     },
     "emailSender": {
       "type": "string",
-      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'communication'), '2025-04-01').outputs.senderAddress.value]"
+      "value": "[reference('communication').outputs.senderAddress.value]"
     },
     "functionApps": {
       "type": "array",
-      "value": "[reference(resourceId('Microsoft.Resources/deployments', 'functions'), '2025-04-01').outputs.names.value]"
+      "value": "[reference('functions').outputs.names.value]"
     }
   }
 }
