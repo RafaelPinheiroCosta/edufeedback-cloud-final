@@ -58,7 +58,7 @@ public class NotificationService {
     notificacao.tentativas++;
     try {
       LOG.info("EMAIL DESABILITADO PARA TESTE");
-      //emailSender.sendHtml(adminEmail, "Feedback crítico recebido", notificacao.mensagem);
+      // emailSender.sendHtml(adminEmail, "Feedback crítico recebido", notificacao.mensagem);
 
       notificacao.status = StatusNotificacao.ENVIADA;
       notificacao.dataEnvio = Instant.now();
