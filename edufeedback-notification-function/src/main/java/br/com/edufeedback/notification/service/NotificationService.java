@@ -1,6 +1,5 @@
 package br.com.edufeedback.notification.service;
 
-import br.com.edufeedback.api.exception.ResourceNotFoundException;
 import br.com.edufeedback.domain.*;
 import br.com.edufeedback.email.EmailSender;
 import br.com.edufeedback.messaging.FeedbackCriticoEvent;
@@ -10,7 +9,6 @@ import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
 import jakarta.transaction.Transactional;
-import java.time.Instant;
 import java.util.UUID;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
@@ -33,70 +31,72 @@ public class NotificationService {
     LOG.info(">>>>>>>>>>>>>>> CHEGOU NO PROCESSAR <<<<<<<<<<<<<<");
 
     return new ProcessingResult("OK", event.eventId());
-//
-//    long startedAt = System.nanoTime();
-//    LOG.infof(
-//        "event=notification.processing.started eventId=%s feedbackId=%s correlationId=%s",
-//        event.eventId(), event.payload().feedbackId(), event.correlationId());
-//    if (eventos.jaProcessado(event.eventId(), CONSUMER)) {
-//      LOG.infof(
-//          "event=notification.processing.skipped reason=duplicate eventId=%s correlationId=%s",
-//          event.eventId(), event.correlationId());
-//      return new ProcessingResult("DUPLICADO", event.eventId());
-//    }
-//    var avaliacao =
-//        avaliacoes
-//            .findByIdOptional(event.payload().feedbackId())
-//            .orElseThrow(
-//                () ->
-//                    new ResourceNotFoundException(
-//                        "FEEDBACK_NOT_FOUND",
-//                        "A avaliação " + event.payload().feedbackId() + " não foi encontrada."));
-//    var notificacao =
-//        notificacoes
-//            .buscarPorEvento(event.eventId())
-//            .orElseGet(() -> novaNotificacao(event, avaliacao));
-//    if (notificacao.status == StatusNotificacao.ENVIADA)
-//      return new ProcessingResult("JA_ENVIADA", event.eventId());
-//    notificacao.status = StatusNotificacao.ENVIANDO;
-//    notificacao.tentativas++;
-//    try {
-//      LOG.info("EMAIL DESABILITADO PARA TESTE");
-//       emailSender.sendHtml(adminEmail, "Feedback crítico recebido", notificacao.mensagem);
-//
-//      notificacao.status = StatusNotificacao.ENVIADA;
-//      notificacao.dataEnvio = Instant.now();
-//      notificacao.ultimoErro = null;
-//      var processed = new EventoProcessadoEntity();
-//      processed.id = UUID.randomUUID();
-//      processed.eventId = event.eventId();
-//      processed.consumer = CONSUMER;
-//      processed.eventType = event.eventType();
-//      processed.status = "PROCESSADO";
-//      processed.processedAt = Instant.now();
-//      processed.correlationId = event.correlationId();
-//      eventos.persist(processed);
-//      metrics.counter("notification.sent.total").increment();
-//      LOG.infof(
-//          "event=notification.sent eventId=%s feedbackId=%s durationMs=%d correlationId=%s",
-//          event.eventId(),
-//          event.payload().feedbackId(),
-//          elapsedMillis(startedAt),
-//          event.correlationId());
-//      return new ProcessingResult("ENVIADA", event.eventId());
-//    } catch (RuntimeException e) {
-//      notificacao.status = StatusNotificacao.FALHOU;
-//      notificacao.ultimoErro = e.getClass().getSimpleName();
-//      metrics.counter("notification.failed.total").increment();
-//      LOG.errorf(
-//          e,
-//          "event=notification.failed eventId=%s feedbackId=%s durationMs=%d correlationId=%s",
-//          event.eventId(),
-//          event.payload().feedbackId(),
-//          elapsedMillis(startedAt),
-//          event.correlationId());
-//      throw e;
-//    }
+    //
+    //    long startedAt = System.nanoTime();
+    //    LOG.infof(
+    //        "event=notification.processing.started eventId=%s feedbackId=%s correlationId=%s",
+    //        event.eventId(), event.payload().feedbackId(), event.correlationId());
+    //    if (eventos.jaProcessado(event.eventId(), CONSUMER)) {
+    //      LOG.infof(
+    //          "event=notification.processing.skipped reason=duplicate eventId=%s
+    // correlationId=%s",
+    //          event.eventId(), event.correlationId());
+    //      return new ProcessingResult("DUPLICADO", event.eventId());
+    //    }
+    //    var avaliacao =
+    //        avaliacoes
+    //            .findByIdOptional(event.payload().feedbackId())
+    //            .orElseThrow(
+    //                () ->
+    //                    new ResourceNotFoundException(
+    //                        "FEEDBACK_NOT_FOUND",
+    //                        "A avaliação " + event.payload().feedbackId() + " não foi
+    // encontrada."));
+    //    var notificacao =
+    //        notificacoes
+    //            .buscarPorEvento(event.eventId())
+    //            .orElseGet(() -> novaNotificacao(event, avaliacao));
+    //    if (notificacao.status == StatusNotificacao.ENVIADA)
+    //      return new ProcessingResult("JA_ENVIADA", event.eventId());
+    //    notificacao.status = StatusNotificacao.ENVIANDO;
+    //    notificacao.tentativas++;
+    //    try {
+    //      LOG.info("EMAIL DESABILITADO PARA TESTE");
+    //       emailSender.sendHtml(adminEmail, "Feedback crítico recebido", notificacao.mensagem);
+    //
+    //      notificacao.status = StatusNotificacao.ENVIADA;
+    //      notificacao.dataEnvio = Instant.now();
+    //      notificacao.ultimoErro = null;
+    //      var processed = new EventoProcessadoEntity();
+    //      processed.id = UUID.randomUUID();
+    //      processed.eventId = event.eventId();
+    //      processed.consumer = CONSUMER;
+    //      processed.eventType = event.eventType();
+    //      processed.status = "PROCESSADO";
+    //      processed.processedAt = Instant.now();
+    //      processed.correlationId = event.correlationId();
+    //      eventos.persist(processed);
+    //      metrics.counter("notification.sent.total").increment();
+    //      LOG.infof(
+    //          "event=notification.sent eventId=%s feedbackId=%s durationMs=%d correlationId=%s",
+    //          event.eventId(),
+    //          event.payload().feedbackId(),
+    //          elapsedMillis(startedAt),
+    //          event.correlationId());
+    //      return new ProcessingResult("ENVIADA", event.eventId());
+    //    } catch (RuntimeException e) {
+    //      notificacao.status = StatusNotificacao.FALHOU;
+    //      notificacao.ultimoErro = e.getClass().getSimpleName();
+    //      metrics.counter("notification.failed.total").increment();
+    //      LOG.errorf(
+    //          e,
+    //          "event=notification.failed eventId=%s feedbackId=%s durationMs=%d correlationId=%s",
+    //          event.eventId(),
+    //          event.payload().feedbackId(),
+    //          elapsedMillis(startedAt),
+    //          event.correlationId());
+    //      throw e;
+    //    }
   }
 
   private NotificacaoEntity novaNotificacao(FeedbackCriticoEvent event, AvaliacaoEntity avaliacao) {
