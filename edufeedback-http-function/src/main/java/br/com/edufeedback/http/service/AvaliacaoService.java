@@ -10,7 +10,6 @@ import br.com.edufeedback.persistence.repository.AvaliacaoRepository;
 import io.micrometer.core.instrument.MeterRegistry;
 import jakarta.enterprise.context.ApplicationScoped;
 import jakarta.inject.Inject;
-import jakarta.transaction.Transactional;
 import java.time.Instant;
 import java.util.*;
 import org.jboss.logging.Logger;
@@ -18,27 +17,21 @@ import org.jboss.logging.Logger;
 @ApplicationScoped
 public class AvaliacaoService {
   private static final Logger LOG = Logger.getLogger(AvaliacaoService.class);
+
   @Inject AvaliacaoRepository repository;
+  @Inject AvaliacaoPersistenceService persistenceService;
   @Inject QueuePublisher publisher;
   @Inject MeterRegistry metrics;
   @Inject AvaliacaoMapper mapper;
 
-  @Transactional
   public AvaliacaoResponse criar(CriarAvaliacaoRequest request, UUID correlationId) {
-    var entity = new AvaliacaoEntity();
-    entity.id = UUID.randomUUID();
-    entity.descricao = request.descricao().trim();
-    entity.nota = request.nota().shortValue();
-    entity.urgencia = CalculadoraUrgencia.classificar(request.nota());
-    entity.dataEnvio = Instant.now();
-    entity.correlationId = correlationId;
-    repository.persist(entity);
-    repository.flush();
+    AvaliacaoEntity entity = persistenceService.salvar(request, correlationId);
 
     LOG.infof(
         "event=feedback.created feedbackId=%s urgency=%s correlationId=%s",
         entity.id, entity.urgencia, correlationId);
     metrics.counter("feedback.received.total", "urgencia", entity.urgencia.name()).increment();
+
     if (entity.urgencia == Urgencia.CRITICA) {
       var event =
           new FeedbackCriticoEvent(

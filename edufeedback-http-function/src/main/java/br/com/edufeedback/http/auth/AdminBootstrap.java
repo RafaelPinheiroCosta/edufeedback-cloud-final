@@ -11,7 +11,6 @@ import jakarta.transaction.Transactional;
 import java.util.UUID;
 import org.jboss.logging.Logger;
 
-/** Cria uma única credencial administrativa para a demonstração do Tech Challenge. */
 @ApplicationScoped
 public class AdminBootstrap {
   private static final Logger LOG = Logger.getLogger(AdminBootstrap.class);
