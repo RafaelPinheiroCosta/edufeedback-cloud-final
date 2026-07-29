@@ -56,11 +56,16 @@ public class AvaliacaoResource {
       throw new BadRequestException("O corpo JSON da requisição é obrigatório.");
     }
     UUID correlationId = UUID.fromString(CorrelationIdFilter.current());
-    var response = service.criar(request, correlationId);
-    return Response.created(URI.create("/api/v1/feedbacks/" + response.id()))
-        .entity(response)
-        .header("X-Correlation-ID", correlationId)
-        .build();
+    var result = service.criar(request, correlationId);
+    var response = result.response();
+    var builder =
+        Response.created(URI.create("/api/v1/feedbacks/" + response.id()))
+            .entity(response)
+            .header("X-Correlation-ID", correlationId);
+    if (result.eventId() != null) {
+      builder.header("X-Event-ID", result.eventId());
+    }
+    return builder.build();
   }
 
   @GET

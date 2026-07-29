@@ -74,6 +74,23 @@ jobs:
             exit 1
           fi
 
+          REQUIRED_FUNCTIONS=(
+            feedbackCriticalNotification
+            enqueueCriticalFeedbackDiagnostic
+            notificationDiagnosticHealth
+            sendNotificationEmailDiagnostic
+            getNotificationDiagnosticStatus
+            getNotificationQueueDiagnostic
+          )
+
+          for FUNCTION_NAME in "${REQUIRED_FUNCTIONS[@]}"; do
+            if [ ! -f "${PACKAGE_PATH}/${FUNCTION_NAME}/function.json" ]; then
+              echo "A função ${FUNCTION_NAME} não foi incluída no pacote."
+              find "${PACKAGE_PATH}" -maxdepth 3 -type f | sort || true
+              exit 1
+            fi
+          done
+
       - name: Validar pacote da Report Function
         shell: bash
         run: |
@@ -84,6 +101,21 @@ jobs:
             find edufeedback-report-function/target -maxdepth 5 -type f | sort || true
             exit 1
           fi
+
+          REQUIRED_FUNCTIONS=(
+            weeklyFeedbackReport
+            runWeeklyFeedbackReportDiagnostic
+            reportDiagnosticHealth
+            sendReportEmailDiagnostic
+          )
+
+          for FUNCTION_NAME in "${REQUIRED_FUNCTIONS[@]}"; do
+            if [ ! -f "${PACKAGE_PATH}/${FUNCTION_NAME}/function.json" ]; then
+              echo "A função ${FUNCTION_NAME} não foi incluída no pacote."
+              find "${PACKAGE_PATH}" -maxdepth 3 -type f | sort || true
+              exit 1
+            fi
+          done
 
       - name: Autenticar no Azure com OIDC
         uses: azure/login@v2

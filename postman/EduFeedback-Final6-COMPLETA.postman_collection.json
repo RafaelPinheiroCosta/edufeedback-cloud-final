@@ -1,0 +1,1764 @@
+{
+  "info": {
+    "_postman_id": "4b62a8cb-d834-4258-abe5-fa817f065882",
+    "name": "EduFeedback Final 6 - API, Queue, ACS e Relatório",
+    "description": "Coleção criada exclusivamente a partir de edufeedback-cloud-final(6).zip e das correções aplicadas nessa versão. Contém testes individuais e um fluxo real automatizado da HTTP Function até a fila, Notification Function, ACS Email, poison queue e relatório.\n\nIMPORTANTE SOBRE URL: httpBase termina em /api (routePrefix da Azure). Como os recursos Jakarta REST do projeto começam em /api/v1, as requisições HTTP usam {{httpBase}}/api/v1, resultando externamente em /api/api/v1. Os HTTP Triggers nativos de Notification/Report usam /api/diagnostics/...",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "noauth"
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "packages": {},
+        "exec": [
+          "function value(name) { return String(pm.collectionVariables.get(name) || '').trim(); }",
+          "",
+          "function todaySaoPaulo() {",
+          "    try {",
+          "        const parts = new Intl.DateTimeFormat('en-CA', {",
+          "            timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit'",
+          "        }).formatToParts(new Date());",
+          "        const values = Object.fromEntries(parts.map(part => [part.type, part.value]));",
+          "        return `${values.year}-${values.month}-${values.day}`;",
+          "    } catch (error) { return new Date().toISOString().slice(0, 10); }",
+          "}",
+          "",
+          "if (!value('runId') || pm.info.requestName.startsWith('SEQ 01')) {",
+          "    pm.collectionVariables.set('runId', pm.variables.replaceIn('{{$guid}}'));",
+          "    pm.collectionVariables.set('eventId', '');",
+          "    pm.collectionVariables.set('feedbackId', '');",
+          "    pm.collectionVariables.set('notificationLastError', '');",
+          "    pm.collectionVariables.set('pollAttempt', '0');",
+          "}",
+          "if (!value('criticalDescription')) {",
+          "    pm.collectionVariables.set('criticalDescription', `Reclamação crítica automatizada - ${value('runId')}`);",
+          "}",
+          "if (!value('reportReferenceDate')) {",
+          "    pm.collectionVariables.set('reportReferenceDate', todaySaoPaulo());",
+          "}",
+          "",
+          "const requestName = pm.info.requestName;",
+          "if (requestName.includes('Notification') || requestName.includes('fila') || requestName.includes('consumidor') || requestName.includes('reclamação crítica pelo diagnóstico')) {",
+          "    const key = value('notificationFunctionKey');",
+          "    if (!key || key.startsWith('COLE_')) throw new Error(\"Configure 'notificationFunctionKey'.\");",
+          "}",
+          "if (requestName.includes('Report') || requestName.includes('relatório')) {",
+          "    const key = value('reportFunctionKey');",
+          "    if (!key || key.startsWith('COLE_')) throw new Error(\"Configure 'reportFunctionKey'.\");",
+          "}"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "httpBase",
+      "value": "https://func-edufeedback-http-rpc2026.azurewebsites.net/api",
+      "type": "string"
+    },
+    {
+      "key": "notificationBase",
+      "value": "https://func-edufeedback-notification-rpc2026.azurewebsites.net/api",
+      "type": "string"
+    },
+    {
+      "key": "reportBase",
+      "value": "https://func-edufeedback-report-rpc2026.azurewebsites.net/api",
+      "type": "string"
+    },
+    {
+      "key": "notificationFunctionKey",
+      "value": "COLE_A_FUNCTION_KEY_DA_NOTIFICATION",
+      "type": "string"
+    },
+    {
+      "key": "reportFunctionKey",
+      "value": "COLE_A_FUNCTION_KEY_DA_REPORT",
+      "type": "string"
+    },
+    {
+      "key": "adminUsername",
+      "value": "admin",
+      "type": "string"
+    },
+    {
+      "key": "adminPassword",
+      "value": "admin123",
+      "type": "string"
+    },
+    {
+      "key": "diagnosticRecipient",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "criticalScore",
+      "value": "0",
+      "type": "string"
+    },
+    {
+      "key": "criticalDescription",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "reportReferenceDate",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "pollDelayMs",
+      "value": "5000",
+      "type": "string"
+    },
+    {
+      "key": "pollMaxAttempts",
+      "value": "10",
+      "type": "string"
+    },
+    {
+      "key": "runId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "accessToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "feedbackId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "eventId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "correlationId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "notificationLastError",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "initialPoisonMessages",
+      "value": "0",
+      "type": "string"
+    },
+    {
+      "key": "reportId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "firstReportStatus",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "00 - Testes individuais",
+      "description": "Execute uma requisição por vez para isolar HTTP, banco, fila, consumidor e ACS.",
+      "item": [
+        {
+          "name": "IND 01 - Saúde da HTTP Function",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": "{{httpBase}}/q/health",
+            "description": "O httpBase já termina em /api, que é o routePrefix padrão da Azure Function. Por isso a saúde Quarkus fica em /api/q/health."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "packages": {},
+                "exec": [
+                  "let responseBody = {};",
+                  "try { responseBody = pm.response.json(); } catch (error) {",
+                  "    console.error('Resposta não é JSON:', pm.response.text());",
+                  "}",
+                  "pm.test('HTTP Function respondeu 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Saúde geral é UP', function () {",
+                  "    pm.expect(responseBody.status).to.eql('UP');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "IND 02 - Saúde/configuração da Notification Function",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-functions-key",
+                "value": "{{notificationFunctionKey}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{notificationBase}}/diagnostics/notifications/health"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "packages": {},
+                "exec": [
+                  "let responseBody = {};",
+                  "try { responseBody = pm.response.json(); } catch (error) {",
+                  "    console.error('Resposta não é JSON:', pm.response.text());",
+                  "}",
+                  "pm.test('Notification Function respondeu 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Notification Function está UP', function () { pm.expect(responseBody.status).to.eql('UP'); });",
+                  "pm.test('Configurações obrigatórias estão presentes', function () {",
+                  "    const cfg = responseBody.configuration || {};",
+                  "    const missing = Object.keys(cfg).filter(key => cfg[key] !== true);",
+                  "    pm.expect(missing, `Configurações ausentes: ${missing.join(', ')}`).to.be.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "IND 03 - Saúde/configuração da Report Function",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-functions-key",
+                "value": "{{reportFunctionKey}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{reportBase}}/diagnostics/reports/health"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "packages": {},
+                "exec": [
+                  "let responseBody = {};",
+                  "try { responseBody = pm.response.json(); } catch (error) {",
+                  "    console.error('Resposta não é JSON:', pm.response.text());",
+                  "}",
+                  "pm.test('Report Function respondeu 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Report Function está UP', function () { pm.expect(responseBody.status).to.eql('UP'); });",
+                  "pm.test('Configurações obrigatórias estão presentes', function () {",
+                  "    const cfg = responseBody.configuration || {};",
+                  "    const missing = Object.keys(cfg).filter(key => cfg[key] !== true);",
+                  "    pm.expect(missing, `Configurações ausentes: ${missing.join(', ')}`).to.be.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "IND 04 - Contagem das filas ativa e poison",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-functions-key",
+                "value": "{{notificationFunctionKey}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{notificationBase}}/diagnostics/notifications/queues"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "packages": {},
+                "exec": [
+                  "let responseBody = {};",
+                  "try { responseBody = pm.response.json(); } catch (error) {",
+                  "    console.error('Resposta não é JSON:', pm.response.text());",
+                  "}",
+                  "pm.test('Diagnóstico da fila respondeu 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Codificação da mensagem é Base64', function () { pm.expect(responseBody.messageEncoding).to.eql('base64'); });",
+                  "pm.test('Contagens são numéricas', function () {",
+                  "    pm.expect(responseBody.activeMessages).to.be.a('number');",
+                  "    pm.expect(responseBody.poisonMessages).to.be.a('number');",
+                  "});",
+                  "console.log('Filas:', responseBody);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "IND 05 - Login administrativo",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": "{{httpBase}}/api/v1/auth/login",
+            "description": "O httpBase termina em /api e o recurso Jakarta REST começa em /api/v1. A URL pública efetiva fica /api/api/v1/... no Azure, conforme o bridge atual do projeto.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{adminUsername}}\",\n  \"password\": \"{{adminPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "packages": {},
+                "exec": [
+                  "let responseBody = {};",
+                  "try { responseBody = pm.response.json(); } catch (error) {",
+                  "    console.error('Resposta não é JSON:', pm.response.text());",
+                  "}",
+                  "pm.test('Login respondeu 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('JWT foi retornado', function () {",
+                  "    pm.expect(responseBody.accessToken).to.be.a('string').and.not.empty;",
+                  "});",
+                  "if (responseBody.accessToken) { pm.collectionVariables.set('accessToken', responseBody.accessToken); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "IND 06 - Criar feedback normal",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "X-Correlation-ID",
+                "value": "{{$guid}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{httpBase}}/api/v1/feedbacks",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"descricao\": \"Feedback normal criado pela coleção da versão final 6.\",\n  \"nota\": 8\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "packages": {},
+                "exec": [
+                  "let responseBody = {};",
+                  "try { responseBody = pm.response.json(); } catch (error) {",
+                  "    console.error('Resposta não é JSON:', pm.response.text());",
+                  "}",
+                  "pm.test('Feedback normal foi criado', function () { pm.response.to.have.status(201); });",
+                  "pm.test('Urgência não é crítica', function () { pm.expect(responseBody.urgencia).to.not.eql('CRITICA'); });",
+                  "pm.test('Não há X-Event-ID para feedback não crítico', function () {",
+                  "    pm.expect(pm.response.headers.get('X-Event-ID')).to.be.null;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "IND 07 - Criar feedback crítico pela API real",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "X-Correlation-ID",
+                "value": "{{runId}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{httpBase}}/api/v1/feedbacks",
+            "description": "Este endpoint prova o fluxo real: HTTP Function persiste e confirma a avaliação, depois publica o evento em Base64 na Azure Queue.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"descricao\": \"{{criticalDescription}}\",\n  \"nota\": {{criticalScore}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "packages": {},
+                "exec": [
+                  "let responseBody = {};",
+                  "try { responseBody = pm.response.json(); } catch (error) {",
+                  "    console.error('Resposta não é JSON:', pm.response.text());",
+                  "}",
+                  "const eventId = pm.response.headers.get('X-Event-ID');",
+                  "pm.test('Feedback crítico foi criado', function () { pm.response.to.have.status(201); });",
+                  "pm.test('Urgência é CRITICA', function () { pm.expect(responseBody.urgencia).to.eql('CRITICA'); });",
+                  "pm.test('X-Event-ID foi retornado', function () { pm.expect(eventId).to.be.a('string').and.not.empty; });",
+                  "if (responseBody.id) pm.collectionVariables.set('feedbackId', responseBody.id);",
+                  "if (responseBody.correlationId) pm.collectionVariables.set('correlationId', responseBody.correlationId);",
+                  "if (eventId) pm.collectionVariables.set('eventId', eventId);",
+                  "pm.collectionVariables.set('pollAttempt', '0');",
+                  "console.log('Feedback/evento:', { feedbackId: responseBody.id, eventId });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "IND 08 - Testar ACS Email da Notification Function",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-functions-key",
+                "value": "{{notificationFunctionKey}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{notificationBase}}/diagnostics/notifications/email",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"recipient\": \"{{diagnosticRecipient}}\",\n  \"subject\": \"Diagnóstico direto Notification - {{runId}}\",\n  \"html\": \"<h1>EduFeedback</h1><p>Teste direto do ACS pela Notification Function.</p>\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "packages": {},
+                "exec": [
+                  "let responseBody = {};",
+                  "try { responseBody = pm.response.json(); } catch (error) {",
+                  "    console.error('Resposta não é JSON:', pm.response.text());",
+                  "}",
+                  "pm.test('Endpoint direto de e-mail respondeu 200', function () { pm.response.to.have.status(200); });",
+                  "if (pm.response.code === 200) {",
+                  "    pm.test('ACS confirmou o envio', function () { pm.expect(responseBody.status).to.eql('ENVIADO'); });",
+                  "    console.log('Operação ACS:', responseBody);",
+                  "} else {",
+                  "    console.error('Erro isolado do ACS na Notification Function:', responseBody);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "IND 09 - Publicar reclamação crítica pelo diagnóstico",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-functions-key",
+                "value": "{{notificationFunctionKey}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{notificationBase}}/diagnostics/notifications/critical",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"descricao\": \"Reclamação crítica criada diretamente na Notification Function - {{runId}}\",\n  \"nota\": 0\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "packages": {},
+                "exec": [
+                  "let responseBody = {};",
+                  "try { responseBody = pm.response.json(); } catch (error) {",
+                  "    console.error('Resposta não é JSON:', pm.response.text());",
+                  "}",
+                  "pm.test('Evento diagnóstico foi aceito', function () { pm.response.to.have.status(202); });",
+                  "pm.test('Evento foi publicado', function () { pm.expect(responseBody.status).to.eql('PUBLICADO'); });",
+                  "if (responseBody.eventId) pm.collectionVariables.set('eventId', responseBody.eventId);",
+                  "if (responseBody.feedbackId) pm.collectionVariables.set('feedbackId', responseBody.feedbackId);",
+                  "if (responseBody.correlationId) pm.collectionVariables.set('correlationId', responseBody.correlationId);",
+                  "pm.collectionVariables.set('pollAttempt', '0');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "IND 10 - Consultar resultado do consumidor",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-functions-key",
+                "value": "{{notificationFunctionKey}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{notificationBase}}/diagnostics/notifications/status/{{eventId}}?feedbackId={{feedbackId}}"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "packages": {},
+                "exec": [
+                  "const eventId = String(pm.collectionVariables.get('eventId') || '').trim();",
+                  "const feedbackId = String(pm.collectionVariables.get('feedbackId') || '').trim();",
+                  "if (!eventId || !feedbackId) {",
+                  "    throw new Error('Execute antes IND 07 ou IND 09 para preencher eventId e feedbackId.');",
+                  "}"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "packages": {},
+                "exec": [
+                  "let responseBody = {};",
+                  "try { responseBody = pm.response.json(); } catch (error) {",
+                  "    console.error('Resposta não é JSON:', pm.response.text());",
+                  "}",
+                  "pm.test('Consulta do consumidor respondeu 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Status é conhecido', function () {",
+                  "    pm.expect(['AGUARDANDO_PROCESSAMENTO','FEEDBACK_NAO_ENCONTRADO','PENDENTE','ENVIANDO','ENVIADA','FALHOU'])",
+                  "      .to.include(responseBody.status);",
+                  "});",
+                  "if (responseBody.lastError) { pm.collectionVariables.set('notificationLastError', responseBody.lastError); }",
+                  "console.log('Diagnóstico do consumidor:', responseBody);",
+                  "if (responseBody.status === 'FALHOU' || responseBody.status === 'FEEDBACK_NAO_ENCONTRADO') {",
+                  "    console.error('Causa encontrada:', responseBody.lastError || responseBody.status);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "IND 11 - Listar feedbacks com JWT",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{httpBase}}/api/v1/feedbacks"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "packages": {},
+                "exec": [
+                  "let responseBody = {};",
+                  "try { responseBody = pm.response.json(); } catch (error) {",
+                  "    console.error('Resposta não é JSON:', pm.response.text());",
+                  "}",
+                  "pm.test('Listagem respondeu 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Resposta é uma lista', function () { pm.expect(responseBody).to.be.an('array'); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "IND 12 - Testar ACS Email da Report Function",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-functions-key",
+                "value": "{{reportFunctionKey}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{reportBase}}/diagnostics/reports/email",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"recipient\": \"{{diagnosticRecipient}}\",\n  \"subject\": \"Diagnóstico direto Report - {{runId}}\",\n  \"html\": \"<h1>EduFeedback</h1><p>Teste direto do ACS pela Report Function.</p>\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "packages": {},
+                "exec": [
+                  "let responseBody = {};",
+                  "try { responseBody = pm.response.json(); } catch (error) {",
+                  "    console.error('Resposta não é JSON:', pm.response.text());",
+                  "}",
+                  "pm.test('Endpoint direto de relatório respondeu 200', function () { pm.response.to.have.status(200); });",
+                  "if (pm.response.code === 200) {",
+                  "    pm.test('ACS confirmou o envio do teste', function () { pm.expect(responseBody.status).to.eql('ENVIADO'); });",
+                  "} else {",
+                  "    console.error('Erro isolado do ACS na Report Function:', responseBody);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "IND 13 - Gerar relatório semanal",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-functions-key",
+                "value": "{{reportFunctionKey}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{reportBase}}/diagnostics/reports/weekly",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"referenceDate\": \"{{reportReferenceDate}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "packages": {},
+                "exec": [
+                  "let responseBody = {};",
+                  "try { responseBody = pm.response.json(); } catch (error) {",
+                  "    console.error('Resposta não é JSON:', pm.response.text());",
+                  "}",
+                  "pm.test('Relatório respondeu 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Status é ENVIADO ou JA_ENVIADO', function () {",
+                  "    pm.expect(['ENVIADO','JA_ENVIADO']).to.include(responseBody.status);",
+                  "});",
+                  "if (responseBody.reportId) pm.collectionVariables.set('reportId', responseBody.reportId);",
+                  "pm.collectionVariables.set('firstReportStatus', responseBody.status || '');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "IND 14 - Repetir relatório e validar idempotência",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-functions-key",
+                "value": "{{reportFunctionKey}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{reportBase}}/diagnostics/reports/weekly",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"referenceDate\": \"{{reportReferenceDate}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "packages": {},
+                "exec": [
+                  "let responseBody = {};",
+                  "try { responseBody = pm.response.json(); } catch (error) {",
+                  "    console.error('Resposta não é JSON:', pm.response.text());",
+                  "}",
+                  "pm.test('Repetição respondeu 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Não houve segundo envio', function () { pm.expect(responseBody.status).to.eql('JA_ENVIADO'); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "01 - Fluxo real automatizado",
+      "description": "Execute esta pasta no Collection Runner. O fluxo para no primeiro componente que falhar.",
+      "item": [
+        {
+          "name": "SEQ 01 - Saúde da HTTP Function",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": "{{httpBase}}/q/health",
+            "description": "O httpBase já termina em /api, que é o routePrefix padrão da Azure Function. Por isso a saúde Quarkus fica em /api/q/health."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "packages": {},
+                "exec": [
+                  "let responseBody = {};",
+                  "try { responseBody = pm.response.json(); } catch (error) {",
+                  "    console.error('Resposta não é JSON:', pm.response.text());",
+                  "}",
+                  "pm.test('HTTP Function respondeu 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Saúde geral é UP', function () {",
+                  "    pm.expect(responseBody.status).to.eql('UP');",
+                  "});",
+                  "if (pm.response.code === 200 && responseBody.status === 'UP') {",
+                  "    if (pm.execution && pm.execution.setNextRequest) {",
+                  "        pm.execution.setNextRequest('SEQ 02 - Saúde da Notification Function');",
+                  "    } else {",
+                  "        postman.setNextRequest('SEQ 02 - Saúde da Notification Function');",
+                  "    }",
+                  "} else {",
+                  "    if (pm.execution && pm.execution.setNextRequest) {",
+                  "        pm.execution.setNextRequest(null);",
+                  "    } else {",
+                  "        postman.setNextRequest(null);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "SEQ 02 - Saúde da Notification Function",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-functions-key",
+                "value": "{{notificationFunctionKey}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{notificationBase}}/diagnostics/notifications/health"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "packages": {},
+                "exec": [
+                  "let responseBody = {};",
+                  "try { responseBody = pm.response.json(); } catch (error) {",
+                  "    console.error('Resposta não é JSON:', pm.response.text());",
+                  "}",
+                  "pm.test('Notification Function respondeu 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Notification Function está UP', function () { pm.expect(responseBody.status).to.eql('UP'); });",
+                  "pm.test('Configurações obrigatórias estão presentes', function () {",
+                  "    const cfg = responseBody.configuration || {};",
+                  "    const missing = Object.keys(cfg).filter(key => cfg[key] !== true);",
+                  "    pm.expect(missing, `Configurações ausentes: ${missing.join(', ')}`).to.be.empty;",
+                  "});",
+                  "const notificationConfigurationOk = pm.response.code === 200 && Object.values(responseBody.configuration || {}).every(Boolean);",
+                  "if (notificationConfigurationOk) {",
+                  "    if (pm.execution && pm.execution.setNextRequest) {",
+                  "        pm.execution.setNextRequest('SEQ 03 - Saúde da Report Function');",
+                  "    } else {",
+                  "        postman.setNextRequest('SEQ 03 - Saúde da Report Function');",
+                  "    }",
+                  "} else { console.error('Configuração da Notification incompleta:', responseBody);",
+                  "    if (pm.execution && pm.execution.setNextRequest) {",
+                  "        pm.execution.setNextRequest(null);",
+                  "    } else {",
+                  "        postman.setNextRequest(null);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "SEQ 03 - Saúde da Report Function",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-functions-key",
+                "value": "{{reportFunctionKey}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{reportBase}}/diagnostics/reports/health"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "packages": {},
+                "exec": [
+                  "let responseBody = {};",
+                  "try { responseBody = pm.response.json(); } catch (error) {",
+                  "    console.error('Resposta não é JSON:', pm.response.text());",
+                  "}",
+                  "pm.test('Report Function respondeu 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Report Function está UP', function () { pm.expect(responseBody.status).to.eql('UP'); });",
+                  "pm.test('Configurações obrigatórias estão presentes', function () {",
+                  "    const cfg = responseBody.configuration || {};",
+                  "    const missing = Object.keys(cfg).filter(key => cfg[key] !== true);",
+                  "    pm.expect(missing, `Configurações ausentes: ${missing.join(', ')}`).to.be.empty;",
+                  "});",
+                  "const reportConfigurationOk = pm.response.code === 200 && Object.values(responseBody.configuration || {}).every(Boolean);",
+                  "if (reportConfigurationOk) {",
+                  "    if (pm.execution && pm.execution.setNextRequest) {",
+                  "        pm.execution.setNextRequest('SEQ 04 - Snapshot inicial das filas');",
+                  "    } else {",
+                  "        postman.setNextRequest('SEQ 04 - Snapshot inicial das filas');",
+                  "    }",
+                  "} else { console.error('Configuração da Report incompleta:', responseBody);",
+                  "    if (pm.execution && pm.execution.setNextRequest) {",
+                  "        pm.execution.setNextRequest(null);",
+                  "    } else {",
+                  "        postman.setNextRequest(null);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "SEQ 04 - Snapshot inicial das filas",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-functions-key",
+                "value": "{{notificationFunctionKey}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{notificationBase}}/diagnostics/notifications/queues"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "packages": {},
+                "exec": [
+                  "let responseBody = {};",
+                  "try { responseBody = pm.response.json(); } catch (error) {",
+                  "    console.error('Resposta não é JSON:', pm.response.text());",
+                  "}",
+                  "pm.test('Diagnóstico da fila respondeu 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Codificação da mensagem é Base64', function () { pm.expect(responseBody.messageEncoding).to.eql('base64'); });",
+                  "pm.test('Contagens são numéricas', function () {",
+                  "    pm.expect(responseBody.activeMessages).to.be.a('number');",
+                  "    pm.expect(responseBody.poisonMessages).to.be.a('number');",
+                  "});",
+                  "console.log('Filas:', responseBody);",
+                  "if (pm.response.code === 200) {",
+                  "    pm.collectionVariables.set('initialPoisonMessages', String(responseBody.poisonMessages));",
+                  "    if (pm.execution && pm.execution.setNextRequest) {",
+                  "        pm.execution.setNextRequest('SEQ 05 - Testar ACS da Notification');",
+                  "    } else {",
+                  "        postman.setNextRequest('SEQ 05 - Testar ACS da Notification');",
+                  "    }",
+                  "} else {",
+                  "    if (pm.execution && pm.execution.setNextRequest) {",
+                  "        pm.execution.setNextRequest(null);",
+                  "    } else {",
+                  "        postman.setNextRequest(null);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "SEQ 05 - Testar ACS da Notification",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-functions-key",
+                "value": "{{notificationFunctionKey}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{notificationBase}}/diagnostics/notifications/email",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"recipient\": \"{{diagnosticRecipient}}\",\n  \"subject\": \"Diagnóstico direto Notification - {{runId}}\",\n  \"html\": \"<h1>EduFeedback</h1><p>Teste direto do ACS pela Notification Function.</p>\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "packages": {},
+                "exec": [
+                  "let responseBody = {};",
+                  "try { responseBody = pm.response.json(); } catch (error) {",
+                  "    console.error('Resposta não é JSON:', pm.response.text());",
+                  "}",
+                  "pm.test('Endpoint direto de e-mail respondeu 200', function () { pm.response.to.have.status(200); });",
+                  "if (pm.response.code === 200) {",
+                  "    pm.test('ACS confirmou o envio', function () { pm.expect(responseBody.status).to.eql('ENVIADO'); });",
+                  "    console.log('Operação ACS:', responseBody);",
+                  "} else {",
+                  "    console.error('Erro isolado do ACS na Notification Function:', responseBody);",
+                  "}",
+                  "if (pm.response.code === 200 && responseBody.status === 'ENVIADO') {",
+                  "    if (pm.execution && pm.execution.setNextRequest) {",
+                  "        pm.execution.setNextRequest('SEQ 06 - Testar ACS da Report');",
+                  "    } else {",
+                  "        postman.setNextRequest('SEQ 06 - Testar ACS da Report');",
+                  "    }",
+                  "} else {",
+                  "    console.error('O fluxo parou: o ACS da Notification falhou antes da fila.', responseBody);",
+                  "    if (pm.execution && pm.execution.setNextRequest) {",
+                  "        pm.execution.setNextRequest(null);",
+                  "    } else {",
+                  "        postman.setNextRequest(null);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "SEQ 06 - Testar ACS da Report",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-functions-key",
+                "value": "{{reportFunctionKey}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{reportBase}}/diagnostics/reports/email",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"recipient\": \"{{diagnosticRecipient}}\",\n  \"subject\": \"Diagnóstico direto Report - {{runId}}\",\n  \"html\": \"<h1>EduFeedback</h1><p>Teste direto do ACS pela Report Function.</p>\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "packages": {},
+                "exec": [
+                  "let responseBody = {};",
+                  "try { responseBody = pm.response.json(); } catch (error) {",
+                  "    console.error('Resposta não é JSON:', pm.response.text());",
+                  "}",
+                  "pm.test('Endpoint direto de relatório respondeu 200', function () { pm.response.to.have.status(200); });",
+                  "if (pm.response.code === 200) {",
+                  "    pm.test('ACS confirmou o envio do teste', function () { pm.expect(responseBody.status).to.eql('ENVIADO'); });",
+                  "} else {",
+                  "    console.error('Erro isolado do ACS na Report Function:', responseBody);",
+                  "}",
+                  "if (pm.response.code === 200 && responseBody.status === 'ENVIADO') {",
+                  "    if (pm.execution && pm.execution.setNextRequest) {",
+                  "        pm.execution.setNextRequest('SEQ 07 - Login administrativo');",
+                  "    } else {",
+                  "        postman.setNextRequest('SEQ 07 - Login administrativo');",
+                  "    }",
+                  "} else {",
+                  "    console.error('O fluxo parou: o ACS da Report falhou.', responseBody);",
+                  "    if (pm.execution && pm.execution.setNextRequest) {",
+                  "        pm.execution.setNextRequest(null);",
+                  "    } else {",
+                  "        postman.setNextRequest(null);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "SEQ 07 - Login administrativo",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": "{{httpBase}}/api/v1/auth/login",
+            "description": "O httpBase termina em /api e o recurso Jakarta REST começa em /api/v1. A URL pública efetiva fica /api/api/v1/... no Azure, conforme o bridge atual do projeto.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{adminUsername}}\",\n  \"password\": \"{{adminPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "packages": {},
+                "exec": [
+                  "let responseBody = {};",
+                  "try { responseBody = pm.response.json(); } catch (error) {",
+                  "    console.error('Resposta não é JSON:', pm.response.text());",
+                  "}",
+                  "pm.test('Login respondeu 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('JWT foi retornado', function () {",
+                  "    pm.expect(responseBody.accessToken).to.be.a('string').and.not.empty;",
+                  "});",
+                  "if (responseBody.accessToken) { pm.collectionVariables.set('accessToken', responseBody.accessToken); }",
+                  "if (pm.response.code === 200 && responseBody.accessToken) {",
+                  "    if (pm.execution && pm.execution.setNextRequest) {",
+                  "        pm.execution.setNextRequest('SEQ 08 - Criar feedback crítico pela API real');",
+                  "    } else {",
+                  "        postman.setNextRequest('SEQ 08 - Criar feedback crítico pela API real');",
+                  "    }",
+                  "} else {",
+                  "    if (pm.execution && pm.execution.setNextRequest) {",
+                  "        pm.execution.setNextRequest(null);",
+                  "    } else {",
+                  "        postman.setNextRequest(null);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "SEQ 08 - Criar feedback crítico pela API real",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "X-Correlation-ID",
+                "value": "{{runId}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{httpBase}}/api/v1/feedbacks",
+            "description": "Este endpoint prova o fluxo real: HTTP Function persiste e confirma a avaliação, depois publica o evento em Base64 na Azure Queue.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"descricao\": \"{{criticalDescription}}\",\n  \"nota\": {{criticalScore}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "packages": {},
+                "exec": [
+                  "let responseBody = {};",
+                  "try { responseBody = pm.response.json(); } catch (error) {",
+                  "    console.error('Resposta não é JSON:', pm.response.text());",
+                  "}",
+                  "const eventId = pm.response.headers.get('X-Event-ID');",
+                  "pm.test('Feedback crítico foi criado', function () { pm.response.to.have.status(201); });",
+                  "pm.test('Urgência é CRITICA', function () { pm.expect(responseBody.urgencia).to.eql('CRITICA'); });",
+                  "pm.test('X-Event-ID foi retornado', function () { pm.expect(eventId).to.be.a('string').and.not.empty; });",
+                  "if (responseBody.id) pm.collectionVariables.set('feedbackId', responseBody.id);",
+                  "if (responseBody.correlationId) pm.collectionVariables.set('correlationId', responseBody.correlationId);",
+                  "if (eventId) pm.collectionVariables.set('eventId', eventId);",
+                  "pm.collectionVariables.set('pollAttempt', '0');",
+                  "console.log('Feedback/evento:', { feedbackId: responseBody.id, eventId });",
+                  "if (pm.response.code === 201 && pm.response.headers.get('X-Event-ID')) {",
+                  "    if (pm.execution && pm.execution.setNextRequest) {",
+                  "        pm.execution.setNextRequest('SEQ 09 - Aguardar o consumidor da fila');",
+                  "    } else {",
+                  "        postman.setNextRequest('SEQ 09 - Aguardar o consumidor da fila');",
+                  "    }",
+                  "} else {",
+                  "    console.error('A criação ou publicação falhou:', responseBody);",
+                  "    if (pm.execution && pm.execution.setNextRequest) {",
+                  "        pm.execution.setNextRequest(null);",
+                  "    } else {",
+                  "        postman.setNextRequest(null);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "SEQ 09 - Aguardar o consumidor da fila",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-functions-key",
+                "value": "{{notificationFunctionKey}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{notificationBase}}/diagnostics/notifications/status/{{eventId}}?feedbackId={{feedbackId}}"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "packages": {},
+                "exec": [
+                  "const eventId = String(pm.collectionVariables.get('eventId') || '').trim();",
+                  "const feedbackId = String(pm.collectionVariables.get('feedbackId') || '').trim();",
+                  "if (!eventId || !feedbackId) throw new Error('eventId/feedbackId não foram capturados.');",
+                  "const attempt = Number(pm.collectionVariables.get('pollAttempt') || '0') + 1;",
+                  "pm.collectionVariables.set('pollAttempt', String(attempt));",
+                  "const delay = Number(pm.collectionVariables.get('pollDelayMs') || '5000');",
+                  "console.log(`Consulta do consumidor ${attempt}; aguardando ${delay} ms.`);",
+                  "setTimeout(function () {}, delay);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "packages": {},
+                "exec": [
+                  "let responseBody = {};",
+                  "try { responseBody = pm.response.json(); } catch (error) {",
+                  "    console.error('Resposta não é JSON:', pm.response.text());",
+                  "}",
+                  "pm.test('Consulta do consumidor respondeu 200', function () { pm.response.to.have.status(200); });",
+                  "const attempt = Number(pm.collectionVariables.get('pollAttempt') || '0');",
+                  "const maxAttempts = Number(pm.collectionVariables.get('pollMaxAttempts') || '10');",
+                  "const status = responseBody.status;",
+                  "if (responseBody.lastError) pm.collectionVariables.set('notificationLastError', responseBody.lastError);",
+                  "console.log('Estado do consumidor:', responseBody);",
+                  "",
+                  "if (pm.response.code !== 200) {",
+                  "    console.error('Falha no endpoint de status:', responseBody);",
+                  "    if (pm.execution && pm.execution.setNextRequest) {",
+                  "        pm.execution.setNextRequest(null);",
+                  "    } else {",
+                  "        postman.setNextRequest(null);",
+                  "    }",
+                  "} else if (status === 'ENVIADA') {",
+                  "    pm.test('Mensagem consumida e e-mail enviado', function () { pm.expect(status).to.eql('ENVIADA'); });",
+                  "    if (pm.execution && pm.execution.setNextRequest) {",
+                  "        pm.execution.setNextRequest('SEQ 10 - Snapshot final das filas');",
+                  "    } else {",
+                  "        postman.setNextRequest('SEQ 10 - Snapshot final das filas');",
+                  "    }",
+                  "} else if (status === 'FALHOU') {",
+                  "    pm.test(`Falha do consumidor: ${responseBody.lastError || 'sem detalhe'}`, function () {",
+                  "        pm.expect.fail(responseBody.lastError || 'A notificação terminou como FALHOU.');",
+                  "    });",
+                  "    if (pm.execution && pm.execution.setNextRequest) {",
+                  "        pm.execution.setNextRequest(null);",
+                  "    } else {",
+                  "        postman.setNextRequest(null);",
+                  "    }",
+                  "} else if (status === 'FEEDBACK_NAO_ENCONTRADO') {",
+                  "    pm.test('Avaliação foi confirmada antes da fila', function () {",
+                  "        pm.expect.fail('FEEDBACK_NAO_ENCONTRADO: verifique commit e DATABASE_URL das Function Apps.');",
+                  "    });",
+                  "    if (pm.execution && pm.execution.setNextRequest) {",
+                  "        pm.execution.setNextRequest(null);",
+                  "    } else {",
+                  "        postman.setNextRequest(null);",
+                  "    }",
+                  "} else if (attempt < maxAttempts) {",
+                  "    if (pm.execution && pm.execution.setNextRequest) {",
+                  "        pm.execution.setNextRequest('SEQ 09 - Aguardar o consumidor da fila');",
+                  "    } else {",
+                  "        postman.setNextRequest('SEQ 09 - Aguardar o consumidor da fila');",
+                  "    }",
+                  "} else {",
+                  "    pm.test(`Timeout aguardando consumidor; status=${status}`, function () {",
+                  "        pm.expect.fail(`A mensagem não terminou após ${maxAttempts} consultas. Status: ${status}`);",
+                  "    });",
+                  "    if (pm.execution && pm.execution.setNextRequest) {",
+                  "        pm.execution.setNextRequest('SEQ 10 - Snapshot final das filas');",
+                  "    } else {",
+                  "        postman.setNextRequest('SEQ 10 - Snapshot final das filas');",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "SEQ 10 - Snapshot final das filas",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-functions-key",
+                "value": "{{notificationFunctionKey}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{notificationBase}}/diagnostics/notifications/queues"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "packages": {},
+                "exec": [
+                  "let responseBody = {};",
+                  "try { responseBody = pm.response.json(); } catch (error) {",
+                  "    console.error('Resposta não é JSON:', pm.response.text());",
+                  "}",
+                  "pm.test('Diagnóstico da fila respondeu 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Codificação da mensagem é Base64', function () { pm.expect(responseBody.messageEncoding).to.eql('base64'); });",
+                  "pm.test('Contagens são numéricas', function () {",
+                  "    pm.expect(responseBody.activeMessages).to.be.a('number');",
+                  "    pm.expect(responseBody.poisonMessages).to.be.a('number');",
+                  "});",
+                  "console.log('Filas:', responseBody);",
+                  "const before = Number(pm.collectionVariables.get('initialPoisonMessages') || '0');",
+                  "pm.test('A execução não aumentou a poison queue', function () {",
+                  "    pm.expect(responseBody.poisonMessages).to.be.at.most(before);",
+                  "});",
+                  "if (responseBody.poisonMessages > before) {",
+                  "    console.error('Poison queue aumentou durante o teste:', { before, after: responseBody.poisonMessages });",
+                  "}",
+                  "if (pm.execution && pm.execution.setNextRequest) {",
+                  "    pm.execution.setNextRequest('SEQ 11 - Listar feedbacks com JWT');",
+                  "} else {",
+                  "    postman.setNextRequest('SEQ 11 - Listar feedbacks com JWT');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "SEQ 11 - Listar feedbacks com JWT",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{httpBase}}/api/v1/feedbacks"
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "packages": {},
+                "exec": [
+                  "let responseBody = {};",
+                  "try { responseBody = pm.response.json(); } catch (error) {",
+                  "    console.error('Resposta não é JSON:', pm.response.text());",
+                  "}",
+                  "pm.test('Listagem respondeu 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Resposta é uma lista', function () { pm.expect(responseBody).to.be.an('array'); });",
+                  "if (pm.response.code === 200) {",
+                  "    if (pm.execution && pm.execution.setNextRequest) {",
+                  "        pm.execution.setNextRequest('SEQ 12 - Gerar relatório semanal');",
+                  "    } else {",
+                  "        postman.setNextRequest('SEQ 12 - Gerar relatório semanal');",
+                  "    }",
+                  "} else {",
+                  "    if (pm.execution && pm.execution.setNextRequest) {",
+                  "        pm.execution.setNextRequest(null);",
+                  "    } else {",
+                  "        postman.setNextRequest(null);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "SEQ 12 - Gerar relatório semanal",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-functions-key",
+                "value": "{{reportFunctionKey}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{reportBase}}/diagnostics/reports/weekly",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"referenceDate\": \"{{reportReferenceDate}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "packages": {},
+                "exec": [
+                  "let responseBody = {};",
+                  "try { responseBody = pm.response.json(); } catch (error) {",
+                  "    console.error('Resposta não é JSON:', pm.response.text());",
+                  "}",
+                  "pm.test('Relatório respondeu 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Status é ENVIADO ou JA_ENVIADO', function () {",
+                  "    pm.expect(['ENVIADO','JA_ENVIADO']).to.include(responseBody.status);",
+                  "});",
+                  "if (responseBody.reportId) pm.collectionVariables.set('reportId', responseBody.reportId);",
+                  "pm.collectionVariables.set('firstReportStatus', responseBody.status || '');",
+                  "if (pm.response.code === 200 && ['ENVIADO','JA_ENVIADO'].includes(responseBody.status)) {",
+                  "    if (pm.execution && pm.execution.setNextRequest) {",
+                  "        pm.execution.setNextRequest('SEQ 13 - Repetir relatório e validar idempotência');",
+                  "    } else {",
+                  "        postman.setNextRequest('SEQ 13 - Repetir relatório e validar idempotência');",
+                  "    }",
+                  "} else {",
+                  "    console.error('Falha ao gerar relatório:', responseBody);",
+                  "    if (pm.execution && pm.execution.setNextRequest) {",
+                  "        pm.execution.setNextRequest(null);",
+                  "    } else {",
+                  "        postman.setNextRequest(null);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "SEQ 13 - Repetir relatório e validar idempotência",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-functions-key",
+                "value": "{{reportFunctionKey}}",
+                "type": "text"
+              }
+            ],
+            "url": "{{reportBase}}/diagnostics/reports/weekly",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"referenceDate\": \"{{reportReferenceDate}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "packages": {},
+                "exec": [
+                  "let responseBody = {};",
+                  "try { responseBody = pm.response.json(); } catch (error) {",
+                  "    console.error('Resposta não é JSON:', pm.response.text());",
+                  "}",
+                  "pm.test('Repetição respondeu 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Não houve segundo envio', function () { pm.expect(responseBody.status).to.eql('JA_ENVIADO'); });",
+                  "console.log('Fluxo finalizado:', {",
+                  "    feedbackId: pm.collectionVariables.get('feedbackId'),",
+                  "    eventId: pm.collectionVariables.get('eventId'),",
+                  "    lastError: pm.collectionVariables.get('notificationLastError'),",
+                  "    reportId: pm.collectionVariables.get('reportId'),",
+                  "    poisonBefore: pm.collectionVariables.get('initialPoisonMessages')",
+                  "});",
+                  "if (pm.execution && pm.execution.setNextRequest) {",
+                  "    pm.execution.setNextRequest(null);",
+                  "} else {",
+                  "    postman.setNextRequest(null);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -14,7 +14,7 @@ import java.util.UUID;
 public class DiagnosticFeedbackPersistence {
   @Inject AvaliacaoRepository repository;
 
-  @Transactional
+  @Transactional(Transactional.TxType.REQUIRES_NEW)
   public CreatedFeedback create(String descricao, int nota, UUID correlationId) {
     Urgencia urgencia = CalculadoraUrgencia.classificar(nota);
     if (urgencia != Urgencia.CRITICA) {

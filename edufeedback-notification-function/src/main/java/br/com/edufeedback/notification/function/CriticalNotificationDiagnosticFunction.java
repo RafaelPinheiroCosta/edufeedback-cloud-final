@@ -1,5 +1,6 @@
 package br.com.edufeedback.notification.function;
 
+import br.com.edufeedback.api.diagnostic.DiagnosticErrorResponse;
 import br.com.edufeedback.messaging.FeedbackCriticoEvent;
 import br.com.edufeedback.messaging.QueuePublisher;
 import br.com.edufeedback.notification.diagnostic.DiagnosticFeedbackPersistence;
@@ -56,7 +57,11 @@ public class CriticalNotificationDiagnosticFunction {
               event.eventId(),
               feedback.feedbackId(),
               correlationId,
-              "A mensagem foi publicada; acompanhe feedbackCriticalNotification no Application Insights.");
+              "/api/diagnostics/notifications/status/"
+                  + event.eventId()
+                  + "?feedbackId="
+                  + feedback.feedbackId(),
+              "A avaliação foi confirmada e a mensagem foi publicada em Base64.");
       context
           .getLogger()
           .info(
@@ -71,7 +76,7 @@ public class CriticalNotificationDiagnosticFunction {
       return json(
           request,
           HttpStatus.BAD_REQUEST,
-          new ErrorResponse("INVALID_DIAGNOSTIC_REQUEST", exception.getMessage()));
+          DiagnosticErrorResponse.from("INVALID_DIAGNOSTIC_REQUEST", exception));
     } catch (Exception exception) {
       context
           .getLogger()
@@ -83,7 +88,7 @@ public class CriticalNotificationDiagnosticFunction {
       return json(
           request,
           HttpStatus.INTERNAL_SERVER_ERROR,
-          new ErrorResponse("DIAGNOSTIC_NOTIFICATION_FAILED", exception.getMessage()));
+          DiagnosticErrorResponse.from("DIAGNOSTIC_NOTIFICATION_FAILED", exception));
     }
   }
 
@@ -113,7 +118,10 @@ public class CriticalNotificationDiagnosticFunction {
   public record CriticalRequest(String descricao, Integer nota) {}
 
   public record EnqueueResponse(
-      String status, UUID eventId, UUID feedbackId, UUID correlationId, String acompanhamento) {}
-
-  public record ErrorResponse(String code, String message) {}
+      String status,
+      UUID eventId,
+      UUID feedbackId,
+      UUID correlationId,
+      String statusPath,
+      String acompanhamento) {}
 }

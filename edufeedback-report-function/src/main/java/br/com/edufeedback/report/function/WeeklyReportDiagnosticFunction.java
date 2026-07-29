@@ -1,5 +1,6 @@
 package br.com.edufeedback.report.function;
 
+import br.com.edufeedback.api.diagnostic.DiagnosticErrorResponse;
 import br.com.edufeedback.report.service.WeeklyReportService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.microsoft.azure.functions.ExecutionContext;
@@ -52,7 +53,7 @@ public class WeeklyReportDiagnosticFunction {
       return json(
           request,
           HttpStatus.BAD_REQUEST,
-          new ErrorResponse("INVALID_DIAGNOSTIC_REQUEST", exception.getMessage()));
+          DiagnosticErrorResponse.from("INVALID_DIAGNOSTIC_REQUEST", exception));
     } catch (Exception exception) {
       context
           .getLogger()
@@ -64,7 +65,7 @@ public class WeeklyReportDiagnosticFunction {
       return json(
           request,
           HttpStatus.INTERNAL_SERVER_ERROR,
-          new ErrorResponse("DIAGNOSTIC_REPORT_FAILED", exception.getMessage()));
+          DiagnosticErrorResponse.from("DIAGNOSTIC_REPORT_FAILED", exception));
     }
   }
 
@@ -95,6 +96,4 @@ public class WeeklyReportDiagnosticFunction {
 
   public record ReportDiagnosticResponse(
       String status, UUID reportId, LocalDate inicio, LocalDate fim, LocalDate referenceDate) {}
-
-  public record ErrorResponse(String code, String message) {}
 }
