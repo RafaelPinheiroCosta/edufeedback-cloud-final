@@ -5,6 +5,7 @@ import com.azure.communication.email.EmailClientBuilder;
 import com.azure.communication.email.models.EmailMessage;
 import com.azure.communication.email.models.EmailSendStatus;
 import jakarta.enterprise.context.ApplicationScoped;
+import java.util.Optional;
 import org.eclipse.microprofile.config.inject.ConfigProperty;
 import org.jboss.logging.Logger;
 
@@ -12,28 +13,34 @@ import org.jboss.logging.Logger;
 public class AzureCommunicationEmailSender implements EmailSender {
   private static final Logger LOG = Logger.getLogger(AzureCommunicationEmailSender.class);
 
-  @ConfigProperty(name = "app.email.connection-string", defaultValue = "")
-  String connectionString;
+  @ConfigProperty(name = "app.email.connection-string")
+  Optional<String> connectionString;
 
-  @ConfigProperty(name = "app.email.sender", defaultValue = "")
-  String senderAddress;
+  @ConfigProperty(name = "app.email.sender")
+  Optional<String> senderAddress;
 
   private volatile EmailClient client;
 
   @Override
   public SendResult sendHtml(String to, String subject, String html) {
-    validateConfiguration();
+    String configuredConnectionString =
+        required(
+            connectionString,
+            "AZURE_COMMUNICATION_CONNECTION_STRING não foi configurada.");
+    String configuredSender =
+        required(senderAddress, "EMAIL_SENDER não foi configurado.");
+
     long startedAt = System.nanoTime();
     LOG.infof("event=email.send.started recipient=%s subject=%s", mask(to), subject);
     try {
       var message =
           new EmailMessage()
-              .setSenderAddress(senderAddress)
+              .setSenderAddress(configuredSender)
               .setToRecipients(to)
               .setSubject(subject)
               .setBodyHtml(html);
 
-      var result = client().beginSend(message).getFinalResult();
+      var result = client(configuredConnectionString).beginSend(message).getFinalResult();
       if (!EmailSendStatus.SUCCEEDED.equals(result.getStatus())) {
         String detail =
             result.getError() == null
@@ -64,18 +71,26 @@ public class AzureCommunicationEmailSender implements EmailSender {
     }
   }
 
-  private EmailClient client() {
+  private EmailClient client(String configuredConnectionString) {
     var current = client;
     if (current == null) {
       synchronized (this) {
         current = client;
         if (current == null) {
-          current = new EmailClientBuilder().connectionString(connectionString).buildClient();
+          current =
+              new EmailClientBuilder()
+                  .connectionString(configuredConnectionString)
+                  .buildClient();
           client = current;
         }
       }
     }
     return current;
+  }
+
+  private String required(Optional<String> value, String message) {
+    return value.filter(configured -> !configured.isBlank())
+        .orElseThrow(() -> new EmailDeliveryException(message));
   }
 
   private long elapsedMillis(long startedAt) {
@@ -87,15 +102,5 @@ public class AzureCommunicationEmailSender implements EmailSender {
       return "***";
     }
     return "***@" + email.substring(email.indexOf('@') + 1);
-  }
-
-  private void validateConfiguration() {
-    if (connectionString == null || connectionString.isBlank()) {
-      throw new EmailDeliveryException(
-          "AZURE_COMMUNICATION_CONNECTION_STRING não foi configurada.");
-    }
-    if (senderAddress == null || senderAddress.isBlank()) {
-      throw new EmailDeliveryException("EMAIL_SENDER não foi configurado.");
-    }
   }
 }

@@ -18,26 +18,26 @@ import org.eclipse.microprofile.config.inject.ConfigProperty;
 public class NotificationHealthDiagnosticFunction {
   @Inject ObjectMapper mapper;
 
-  @ConfigProperty(name = "app.queue.name", defaultValue = "")
-  String queueName;
+  @ConfigProperty(name = "app.queue.name")
+  Optional<String> queueName;
 
-  @ConfigProperty(name = "app.queue.connection-string", defaultValue = "")
-  String storageConnection;
+  @ConfigProperty(name = "app.queue.connection-string")
+  Optional<String> storageConnection;
 
-  @ConfigProperty(name = "app.queue.endpoint", defaultValue = "")
-  String storageEndpoint;
+  @ConfigProperty(name = "app.queue.endpoint")
+  Optional<String> storageEndpoint;
 
-  @ConfigProperty(name = "app.admin-email", defaultValue = "")
-  String adminEmail;
+  @ConfigProperty(name = "app.admin-email")
+  Optional<String> adminEmail;
 
-  @ConfigProperty(name = "app.email.connection-string", defaultValue = "")
-  String emailConnection;
+  @ConfigProperty(name = "app.email.connection-string")
+  Optional<String> emailConnection;
 
-  @ConfigProperty(name = "app.email.sender", defaultValue = "")
-  String emailSender;
+  @ConfigProperty(name = "app.email.sender")
+  Optional<String> emailSender;
 
-  @ConfigProperty(name = "quarkus.datasource.jdbc.url", defaultValue = "")
-  String databaseUrl;
+  @ConfigProperty(name = "quarkus.datasource.jdbc.url")
+  Optional<String> databaseUrl;
 
   @FunctionName("notificationDiagnosticHealth")
   public HttpResponseMessage run(
@@ -60,11 +60,16 @@ public class NotificationHealthDiagnosticFunction {
     return json(
         request,
         HttpStatus.OK,
-        new HealthResponse("UP", "notification", queueName, Instant.now(), configuration));
+        new HealthResponse(
+            "UP", "notification", value(queueName), Instant.now(), configuration));
   }
 
-  private boolean configured(String value) {
-    return value != null && !value.isBlank();
+  private boolean configured(Optional<String> value) {
+    return value.filter(configured -> !configured.isBlank()).isPresent();
+  }
+
+  private String value(Optional<String> value) {
+    return value.filter(configured -> !configured.isBlank()).orElse("");
   }
 
   private HttpResponseMessage json(HttpRequestMessage<?> request, HttpStatus status, Object body) {
