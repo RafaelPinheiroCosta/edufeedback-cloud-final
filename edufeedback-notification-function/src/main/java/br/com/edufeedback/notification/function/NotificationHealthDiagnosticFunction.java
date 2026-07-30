@@ -60,8 +60,7 @@ public class NotificationHealthDiagnosticFunction {
     return json(
         request,
         HttpStatus.OK,
-        new HealthResponse(
-            "UP", "notification", value(queueName), Instant.now(), configuration));
+        new HealthResponse("UP", "notification", value(queueName), Instant.now(), configuration));
   }
 
   private boolean configured(Optional<String> value) {

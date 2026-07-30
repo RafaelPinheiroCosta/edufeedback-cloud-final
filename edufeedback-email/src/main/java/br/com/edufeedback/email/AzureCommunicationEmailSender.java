@@ -24,11 +24,8 @@ public class AzureCommunicationEmailSender implements EmailSender {
   @Override
   public SendResult sendHtml(String to, String subject, String html) {
     String configuredConnectionString =
-        required(
-            connectionString,
-            "AZURE_COMMUNICATION_CONNECTION_STRING não foi configurada.");
-    String configuredSender =
-        required(senderAddress, "EMAIL_SENDER não foi configurado.");
+        required(connectionString, "AZURE_COMMUNICATION_CONNECTION_STRING não foi configurada.");
+    String configuredSender = required(senderAddress, "EMAIL_SENDER não foi configurado.");
 
     long startedAt = System.nanoTime();
     LOG.infof("event=email.send.started recipient=%s subject=%s", mask(to), subject);
@@ -78,9 +75,7 @@ public class AzureCommunicationEmailSender implements EmailSender {
         current = client;
         if (current == null) {
           current =
-              new EmailClientBuilder()
-                  .connectionString(configuredConnectionString)
-                  .buildClient();
+              new EmailClientBuilder().connectionString(configuredConnectionString).buildClient();
           client = current;
         }
       }
@@ -89,7 +84,8 @@ public class AzureCommunicationEmailSender implements EmailSender {
   }
 
   private String required(Optional<String> value, String message) {
-    return value.filter(configured -> !configured.isBlank())
+    return value
+        .filter(configured -> !configured.isBlank())
         .orElseThrow(() -> new EmailDeliveryException(message));
   }
 

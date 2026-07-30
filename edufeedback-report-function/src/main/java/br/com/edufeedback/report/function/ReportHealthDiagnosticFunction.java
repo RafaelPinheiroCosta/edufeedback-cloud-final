@@ -51,9 +51,7 @@ public class ReportHealthDiagnosticFunction {
             "timezoneConfigured", configured(timezone));
 
     return json(
-        request,
-        HttpStatus.OK,
-        new HealthResponse("UP", "report", Instant.now(), configuration));
+        request, HttpStatus.OK, new HealthResponse("UP", "report", Instant.now(), configuration));
   }
 
   private boolean configured(Optional<String> value) {
@@ -77,8 +75,5 @@ public class ReportHealthDiagnosticFunction {
   }
 
   public record HealthResponse(
-      String status,
-      String function,
-      Instant timestamp,
-      Map<String, Boolean> configuration) {}
+      String status, String function, Instant timestamp, Map<String, Boolean> configuration) {}
 }
