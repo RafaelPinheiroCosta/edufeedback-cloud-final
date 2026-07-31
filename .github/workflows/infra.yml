@@ -20,6 +20,7 @@ on:
 permissions:
   contents: read
   id-token: write
+  actions: write
 
 concurrency:
   group: edufeedback-infra-prod
@@ -80,9 +81,12 @@ jobs:
           generated = (
               original.rstrip()
               + "\n\n"
-              + f"param adminEmail = '{bicep_string(admin_email)}'\n"
-              + "param databaseAdminPassword = "
-              + f"'{bicep_string(postgres_password)}'\n"
+              + "param adminEmail = '"
+              + bicep_string(admin_email)
+              + "'\n"
+              + "param databaseAdminPassword = '"
+              + bicep_string(postgres_password)
+              + "'\n"
           )
 
           generated_path.write_text(generated, encoding="utf-8")
@@ -115,6 +119,14 @@ jobs:
             --resource-group "${RESOURCE_GROUP}" \
             --parameters "${GENERATED_PARAMETER_FILE}" \
             --output table
+
+      - name: Publicar aplicações após a infraestrutura
+        if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh workflow run application.yml \
+            --ref main
 
       - name: Excluir arquivo temporário
         if: always()

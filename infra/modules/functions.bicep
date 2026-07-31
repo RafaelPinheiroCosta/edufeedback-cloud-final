@@ -66,10 +66,7 @@ resource functions 'Microsoft.Web/sites@2024-11-01' = [
             name: 'FUNCTIONS_WORKER_RUNTIME'
             value: 'java'
           }
-          {
-            name: 'WEBSITE_RUN_FROM_PACKAGE'
-            value: '1'
-          }
+
           {
             name: 'QUARKUS_PROFILE'
             value: 'prod'
@@ -78,12 +75,10 @@ resource functions 'Microsoft.Web/sites@2024-11-01' = [
             name: 'APPLICATIONINSIGHTS_CONNECTION_STRING'
             value: appInsightsConnectionString
           }
-
           {
             name: 'AzureWebJobsStorage'
             value: storageConnectionString
           }
-
           {
             name: 'AZURE_STORAGE_CONNECTION_STRING'
             value: '@Microsoft.KeyVault(SecretUri=${storageConnectionSecretUri})'
