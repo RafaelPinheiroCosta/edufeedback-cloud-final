@@ -79,15 +79,11 @@ resource functions 'Microsoft.Web/sites@2024-11-01' = [
             value: appInsightsConnectionString
           }
 
-          // O GitHub Actions precisa receber uma connection string real
-          // para publicar o pacote em Linux Consumption.
           {
             name: 'AzureWebJobsStorage'
             value: storageConnectionString
           }
 
-          // A aplicação continua utilizando o Key Vault para acessar
-          // explicitamente o Storage.
           {
             name: 'AZURE_STORAGE_CONNECTION_STRING'
             value: '@Microsoft.KeyVault(SecretUri=${storageConnectionSecretUri})'

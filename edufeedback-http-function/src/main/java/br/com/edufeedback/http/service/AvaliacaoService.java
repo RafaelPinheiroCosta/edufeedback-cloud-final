@@ -37,9 +37,6 @@ public class AvaliacaoService {
     entity.dataEnvio = Instant.now();
     entity.correlationId = correlationId;
 
-    // O REQUIRES_NEW confirma a avaliação antes de qualquer publicação na fila.
-    // repository.flush() sozinho não representa commit e permitia a Queue Trigger
-    // consultar o feedback antes de ele ficar visível em outra conexão.
     persistence.persistirEConfirmar(entity);
 
     LOG.infof(

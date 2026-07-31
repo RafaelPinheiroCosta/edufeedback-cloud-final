@@ -8,7 +8,6 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-# Resolve os caminhos independentemente da pasta em que o script for executado.
 $scriptDirectory = Split-Path -Parent $MyInvocation.MyCommand.Path
 $infraDirectory = Split-Path -Parent $scriptDirectory
 $parametersDirectory = Join-Path $infraDirectory 'parameters'
@@ -39,8 +38,6 @@ function ConvertTo-BicepStringLiteral {
     [string]$Value
   )
 
-  # Em strings Bicep delimitadas por aspas simples,
-  # uma aspa simples interna é representada por duas aspas simples.
   return $Value.Replace("'", "''")
 }
 
@@ -76,8 +73,6 @@ try {
   $escapedAdminEmail = ConvertTo-BicepStringLiteral -Value $AdminEmail
   $escapedPassword = ConvertTo-BicepStringLiteral -Value $password
 
-  # Cria uma cópia temporária do arquivo .bicepparam,
-  # acrescentando os parâmetros sensíveis que não ficam versionados no Git.
   $parameterContent = Get-Content `
         -LiteralPath $sourceParametersFile `
         -Raw
@@ -85,8 +80,6 @@ try {
   $generatedContent = @"
 $parameterContent
 
-// Parâmetros inseridos temporariamente pelo deploy-prod.ps1.
-// Este arquivo é excluído automaticamente ao final da execução.
 param adminEmail = '$escapedAdminEmail'
 param databaseAdminPassword = '$escapedPassword'
 "@

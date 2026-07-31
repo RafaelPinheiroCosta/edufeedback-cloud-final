@@ -1,17 +1,10 @@
-# Maven / Quarkus
 **/target/
 *.log
-
-# IDEs
 .idea/
 *.iml
 .vscode/
-
-# Operating system
 .DS_Store
 Thumbs.db
-
-# Local secrets and generated keys
 .env
 .env.*
 !.env.example
@@ -20,12 +13,7 @@ Thumbs.db
 *.p12
 *.publishsettings
 local-security/
-
-# Test reports
 allure-results/
-
-# Chaves locais de produção continuam ignoradas.
-# Estas chaves são exclusivas para testes automatizados.
 !edufeedback-http-function/src/main/resources/privateKey.pem
 !edufeedback-http-function/src/main/resources/publicKey.pem
 !edufeedback-notification-function/src/main/resources/publicKey.pem

@@ -12,7 +12,6 @@ import java.util.UUID;
 import org.jboss.logging.Logger;
 import org.jboss.logging.MDC;
 
-/** Propaga X-Correlation-ID e registra início/fim de cada requisição HTTP. */
 @Provider
 @Priority(Priorities.AUTHENTICATION - 10)
 public class CorrelationIdFilter implements ContainerRequestFilter, ContainerResponseFilter {

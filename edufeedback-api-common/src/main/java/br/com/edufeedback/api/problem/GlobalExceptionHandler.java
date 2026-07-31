@@ -29,7 +29,6 @@ import java.util.UUID;
 import org.jboss.logging.Logger;
 import org.jboss.logging.MDC;
 
-/** Único ponto de tradução de exceções da API para application/problem+json. */
 @Provider
 @Priority(Priorities.USER)
 public class GlobalExceptionHandler implements ExceptionMapper<Throwable> {

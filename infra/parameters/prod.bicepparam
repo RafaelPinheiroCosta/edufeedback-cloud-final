@@ -16,4 +16,3 @@ param functionPlanName = 'plan-edufeedback-prod'
 param httpFunctionName = 'func-edufeedback-http-rpc2026'
 param notificationFunctionName = 'func-edufeedback-notification-rpc2026'
 param reportFunctionName = 'func-edufeedback-report-rpc2026'
-// databaseAdminPassword e adminEmail são fornecidos pelo script/pipeline; nunca versionados.

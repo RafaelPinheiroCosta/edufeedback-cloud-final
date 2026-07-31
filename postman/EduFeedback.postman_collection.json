@@ -1,0 +1,2185 @@
+{
+  "info": {
+    "_postman_id": "6f8c4735-89a7-4bd9-a29c-377772211d43",
+    "name": "EduFeedback - Validação completa",
+    "description": "Coleção automatizada para validar a API pública, autenticação JWT, regras de feedback, processamento assíncrono, diagnósticos da Notification Function e relatório semanal.\n\nA pasta 01 não exige Function Key. A pasta 02 usa a chave da Notification apenas para confirmar o processamento interno. A pasta 03 exige notificationFunctionKey. A pasta 04 exige reportFunctionKey. Execute pelo Collection Runner mantendo a ordem das pastas.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "function cv(name) { return String(pm.collectionVariables.get(name) || '').trim(); }",
+          "function guid() { return pm.variables.replaceIn('{{$guid}}'); }",
+          "function todaySaoPaulo() {",
+          "  try {",
+          "    const parts = new Intl.DateTimeFormat('en-CA', {",
+          "      timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit'",
+          "    }).formatToParts(new Date());",
+          "    const values = Object.fromEntries(parts.map(part => [part.type, part.value]));",
+          "    return `${values.year}-${values.month}-${values.day}`;",
+          "  } catch (error) {",
+          "    return new Date().toISOString().slice(0, 10);",
+          "  }",
+          "}",
+          "",
+          "const firstRequest = pm.info.requestName === '01.01 - Saúde da HTTP Function';",
+          "if (firstRequest || !cv('runId')) {",
+          "  pm.collectionVariables.set('runId', guid());",
+          "  pm.collectionVariables.set('normalCorrelationId', guid());",
+          "  pm.collectionVariables.set('attentionCorrelationId', guid());",
+          "  pm.collectionVariables.set('criticalCorrelationId', guid());",
+          "  pm.collectionVariables.set('missingFeedbackId', guid());",
+          "  pm.collectionVariables.set('accessToken', '');",
+          "  pm.collectionVariables.set('normalFeedbackId', '');",
+          "  pm.collectionVariables.set('attentionFeedbackId', '');",
+          "  pm.collectionVariables.set('criticalFeedbackId', '');",
+          "  pm.collectionVariables.set('criticalEventId', '');",
+          "  pm.collectionVariables.set('pollAttempt', '0');",
+          "  pm.collectionVariables.set('reportId', '');",
+          "  pm.collectionVariables.set('firstReportStatus', '');",
+          "  pm.collectionVariables.set('initialFeedbackCount', '0');",
+          "  pm.collectionVariables.set('initialActiveMessages', '0');",
+          "  pm.collectionVariables.set('initialPoisonMessages', '0');",
+          "}",
+          "const override = cv('reportReferenceDateOverride');",
+          "pm.collectionVariables.set('reportReferenceDate', override || todaySaoPaulo());",
+          ""
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "01 - API pública e autenticação — sem Function Keys",
+      "description": "Valida a HTTP Function, login, JWT, autorização e contratos de erro da API. Este grupo NÃO usa notificationFunctionKey nem reportFunctionKey. Pode ser executado isoladamente por qualquer consumidor autorizado da API.",
+      "item": [
+        {
+          "name": "01.01 - Saúde da HTTP Function",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{httpHost}}/api/q/health",
+              "host": [
+                "{{httpHost}}"
+              ],
+              "path": [
+                "api",
+                "q",
+                "health"
+              ]
+            },
+            "description": "Valida inicialização da Azure Function HTTP e do Quarkus."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function jsonBody() {",
+                  "  try { return pm.response.json(); }",
+                  "  catch (error) { console.error('Resposta não JSON:', pm.response.text()); return {}; }",
+                  "}",
+                  "const body = jsonBody();",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Saúde geral UP', () => pm.expect(body.status).to.eql('UP'));",
+                  "pm.test('Resposta em JSON', () => pm.expect(pm.response.headers.get('Content-Type') || '').to.include('application/json'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "01.02 - Login administrativo com sucesso",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{httpHost}}/api/v1/auth/login",
+              "host": [
+                "{{httpHost}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Gera o JWT usado automaticamente pelos testes administrativos seguintes.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{adminUsername}}\",\n  \"password\": \"{{adminPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;",
+                  "function jsonBody() {",
+                  "  try { return pm.response.json(); }",
+                  "  catch (error) { console.error('Resposta não JSON:', pm.response.text()); return {}; }",
+                  "}",
+                  "const body = jsonBody();",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('JWT retornado', () => pm.expect(body.accessToken).to.be.a('string').and.not.empty);",
+                  "pm.test('Token Bearer', () => pm.expect(body.tokenType).to.eql('Bearer'));",
+                  "pm.test('Tempo de expiração positivo', () => pm.expect(body.expiresIn).to.be.a('number').and.above(0));",
+                  "if (body.accessToken) pm.collectionVariables.set('accessToken', body.accessToken);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "01.03 - Login rejeita senha inválida",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{httpHost}}/api/v1/auth/login",
+              "host": [
+                "{{httpHost}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Teste negativo de autenticação.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"{{adminUsername}}\",\n  \"password\": \"senha-incorreta-{{runId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function jsonBody() {",
+                  "  try { return pm.response.json(); }",
+                  "  catch (error) { console.error('Resposta não JSON:', pm.response.text()); return {}; }",
+                  "}",
+                  "const body = jsonBody();",
+                  "pm.test('HTTP 401', () => pm.response.to.have.status(401));",
+                  "pm.test('Código INVALID_CREDENTIALS', () => pm.expect(body.errorCode).to.eql('INVALID_CREDENTIALS'));",
+                  "pm.test('Nenhum token retornado', () => pm.expect(body.accessToken).to.be.undefined);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "01.04 - Login valida campos obrigatórios",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{httpHost}}/api/v1/auth/login",
+              "host": [
+                "{{httpHost}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Teste negativo de Bean Validation.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"username\": \"\",\n  \"password\": \"\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function jsonBody() {",
+                  "  try { return pm.response.json(); }",
+                  "  catch (error) { console.error('Resposta não JSON:', pm.response.text()); return {}; }",
+                  "}",
+                  "const body = jsonBody();",
+                  "pm.test('HTTP 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código VALIDATION_ERROR', () => pm.expect(body.errorCode).to.eql('VALIDATION_ERROR'));",
+                  "pm.test('Violações de username e password', () => {",
+                  "  pm.expect(body.violations || {}).to.have.property('username');",
+                  "  pm.expect(body.violations || {}).to.have.property('password');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "01.05 - Login rejeita JSON malformado",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{httpHost}}/api/v1/auth/login",
+              "host": [
+                "{{httpHost}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "Teste negativo do parser JSON.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"username\":\"admin\",\"password\":",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function jsonBody() {",
+                  "  try { return pm.response.json(); }",
+                  "  catch (error) { console.error('Resposta não JSON:', pm.response.text()); return {}; }",
+                  "}",
+                  "const body = jsonBody();",
+                  "pm.test('HTTP 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código MALFORMED_JSON', () => pm.expect(body.errorCode).to.eql('MALFORMED_JSON'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "01.06 - Listagem protegida rejeita ausência de JWT",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{httpHost}}/api/v1/feedbacks",
+              "host": [
+                "{{httpHost}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "feedbacks"
+              ]
+            },
+            "description": "A resposta pode vir sem corpo porque a camada de segurança rejeita antes do handler global."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "01.07 - Listagem protegida rejeita JWT inválido",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer jwt-invalido.{{runId}}.teste",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{httpHost}}/api/v1/feedbacks",
+              "host": [
+                "{{httpHost}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "feedbacks"
+              ]
+            },
+            "description": "Teste negativo da validação de assinatura/formato do JWT."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('HTTP 401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "01.08 - Listar feedbacks com JWT válido",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{httpHost}}/api/v1/feedbacks",
+              "host": [
+                "{{httpHost}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "feedbacks"
+              ]
+            },
+            "description": "Valida autenticação e consulta ao PostgreSQL."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function jsonBody() {",
+                  "  try { return pm.response.json(); }",
+                  "  catch (error) { console.error('Resposta não JSON:', pm.response.text()); return {}; }",
+                  "}",
+                  "const body = jsonBody();",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Resposta é uma lista', () => pm.expect(body).to.be.an('array'));",
+                  "pm.collectionVariables.set('initialFeedbackCount', String(Array.isArray(body) ? body.length : 0));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "01.09 - Validação isolada da descrição",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{httpHost}}/api/v1/feedbacks",
+              "host": [
+                "{{httpHost}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "feedbacks"
+              ]
+            },
+            "description": "Confirma que a nota 10 é válida e que a descrição vazia é rejeitada.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"descricao\": \"\",\n  \"nota\": 10\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function jsonBody() {",
+                  "  try { return pm.response.json(); }",
+                  "  catch (error) { console.error('Resposta não JSON:', pm.response.text()); return {}; }",
+                  "}",
+                  "const body = jsonBody();",
+                  "const violations = body.violations || {};",
+                  "pm.test('HTTP 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código VALIDATION_ERROR', () => pm.expect(body.errorCode).to.eql('VALIDATION_ERROR'));",
+                  "pm.test('Somente descrição é inválida; nota 10 é válida', () => {",
+                  "  pm.expect(Object.keys(violations)).to.deep.equal(['descricao']);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "01.10 - Validação múltipla do feedback",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{httpHost}}/api/v1/feedbacks",
+              "host": [
+                "{{httpHost}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "feedbacks"
+              ]
+            },
+            "description": "Valida retorno agregado de múltiplas violações.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"descricao\": \"curta\",\n  \"nota\": 11\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function jsonBody() {",
+                  "  try { return pm.response.json(); }",
+                  "  catch (error) { console.error('Resposta não JSON:', pm.response.text()); return {}; }",
+                  "}",
+                  "const body = jsonBody();",
+                  "const violations = body.violations || {};",
+                  "pm.test('HTTP 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código VALIDATION_ERROR', () => pm.expect(body.errorCode).to.eql('VALIDATION_ERROR'));",
+                  "pm.test('Descrição e nota foram rejeitadas', () => {",
+                  "  pm.expect(violations).to.have.property('descricao');",
+                  "  pm.expect(violations).to.have.property('nota');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "01.11 - Feedback rejeita JSON malformado",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{httpHost}}/api/v1/feedbacks",
+              "host": [
+                "{{httpHost}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "feedbacks"
+              ]
+            },
+            "description": "Teste negativo do parser JSON no endpoint público.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"descricao\":\"JSON incompleto para teste\",\"nota\":",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function jsonBody() {",
+                  "  try { return pm.response.json(); }",
+                  "  catch (error) { console.error('Resposta não JSON:', pm.response.text()); return {}; }",
+                  "}",
+                  "const body = jsonBody();",
+                  "pm.test('HTTP 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código MALFORMED_JSON', () => pm.expect(body.errorCode).to.eql('MALFORMED_JSON'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "01.12 - Feedback rejeita Correlation ID inválido",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "X-Correlation-ID",
+                "value": "valor-invalido",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{httpHost}}/api/v1/feedbacks",
+              "host": [
+                "{{httpHost}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "feedbacks"
+              ]
+            },
+            "description": "Teste negativo do filtro de observabilidade.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"descricao\": \"Teste de cabeçalho de correlação inválido\",\n  \"nota\": 8\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function jsonBody() {",
+                  "  try { return pm.response.json(); }",
+                  "  catch (error) { console.error('Resposta não JSON:', pm.response.text()); return {}; }",
+                  "}",
+                  "const body = jsonBody();",
+                  "pm.test('HTTP 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código INVALID_CORRELATION_ID', () => pm.expect(body.errorCode).to.eql('INVALID_CORRELATION_ID'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "01.13 - Método HTTP não permitido",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{httpHost}}/api/v1/feedbacks",
+              "host": [
+                "{{httpHost}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "feedbacks"
+              ]
+            },
+            "description": "Teste negativo de roteamento/método.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"descricao\": \"Método não permitido\",\n  \"nota\": 8\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function jsonBody() {",
+                  "  try { return pm.response.json(); }",
+                  "  catch (error) { console.error('Resposta não JSON:', pm.response.text()); return {}; }",
+                  "}",
+                  "const body = jsonBody();",
+                  "pm.test('HTTP 405', () => pm.response.to.have.status(405));",
+                  "pm.test('Código METHOD_NOT_ALLOWED quando houver ProblemDetail', () => {",
+                  "  if (body.errorCode !== undefined) pm.expect(body.errorCode).to.eql('METHOD_NOT_ALLOWED');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "01.14 - Tipo de mídia não suportado",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "text/plain",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{httpHost}}/api/v1/feedbacks",
+              "host": [
+                "{{httpHost}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "feedbacks"
+              ]
+            },
+            "description": "Teste negativo do Content-Type.",
+            "body": {
+              "mode": "raw",
+              "raw": "conteúdo textual que não é application/json",
+              "options": {
+                "raw": {
+                  "language": "text"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function jsonBody() {",
+                  "  try { return pm.response.json(); }",
+                  "  catch (error) { console.error('Resposta não JSON:', pm.response.text()); return {}; }",
+                  "}",
+                  "const body = jsonBody();",
+                  "pm.test('HTTP 415', () => pm.response.to.have.status(415));",
+                  "pm.test('Código UNSUPPORTED_MEDIA_TYPE quando houver ProblemDetail', () => {",
+                  "  if (body.errorCode !== undefined) pm.expect(body.errorCode).to.eql('UNSUPPORTED_MEDIA_TYPE');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02 - Fluxo E2E de feedback — criação pública + confirmação interna",
+      "description": "Cria feedbacks NORMAL, ATENCAO e CRITICA pela API pública. A criação não exige Function Key. Para confirmar tecnicamente o processamento assíncrono do feedback crítico, este grupo consulta fila e status internos da Notification Function, portanto exige notificationFunctionKey. O JWT é obtido automaticamente no grupo 01 quando a coleção inteira é executada.",
+      "item": [
+        {
+          "name": "02.01 - Snapshot inicial das filas",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-functions-key",
+                "value": "{{notificationFunctionKey}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{notificationHost}}/api/diagnostics/notifications/queues",
+              "host": [
+                "{{notificationHost}}"
+              ],
+              "path": [
+                "api",
+                "diagnostics",
+                "notifications",
+                "queues"
+              ]
+            },
+            "description": "Registra a situação inicial para comparar após o processamento assíncrono."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function jsonBody() {",
+                  "  try { return pm.response.json(); }",
+                  "  catch (error) { console.error('Resposta não JSON:', pm.response.text()); return {}; }",
+                  "}",
+                  "const body = jsonBody();",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Codificação Base64', () => pm.expect(body.messageEncoding).to.eql('base64'));",
+                  "pm.test('Contagens numéricas', () => {",
+                  "  pm.expect(body.activeMessages).to.be.a('number');",
+                  "  pm.expect(body.poisonMessages).to.be.a('number');",
+                  "});",
+                  "pm.collectionVariables.set('initialActiveMessages', String(body.activeMessages ?? 0));",
+                  "pm.collectionVariables.set('initialPoisonMessages', String(body.poisonMessages ?? 0));",
+                  "console.log('Snapshot inicial das filas:', body);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "02.02 - Criar feedback NORMAL no limite superior",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "X-Correlation-ID",
+                "value": "{{normalCorrelationId}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{httpHost}}/api/v1/feedbacks",
+              "host": [
+                "{{httpHost}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "feedbacks"
+              ]
+            },
+            "description": "Valida a faixa NORMAL e a propagação de X-Correlation-ID.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"descricao\": \"Feedback NORMAL automatizado no limite da nota 10 - {{runId}}\",\n  \"nota\": 10\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;",
+                  "function jsonBody() {",
+                  "  try { return pm.response.json(); }",
+                  "  catch (error) { console.error('Resposta não JSON:', pm.response.text()); return {}; }",
+                  "}",
+                  "const body = jsonBody();",
+                  "const correlationHeader = pm.response.headers.get('X-Correlation-ID');",
+                  "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Classificação NORMAL', () => pm.expect(body.urgencia).to.eql('NORMAL'));",
+                  "pm.test('Nota 10 aceita', () => pm.expect(body.nota).to.eql(10));",
+                  "pm.test('ID válido', () => pm.expect(String(body.id || '')).to.match(UUID_RE));",
+                  "pm.test('Correlation ID propagado', () => {",
+                  "  pm.expect(String(body.correlationId)).to.eql(pm.collectionVariables.get('normalCorrelationId'));",
+                  "  pm.expect(correlationHeader).to.eql(pm.collectionVariables.get('normalCorrelationId'));",
+                  "});",
+                  "pm.test('Feedback normal não publica evento', () => pm.expect(pm.response.headers.get('X-Event-ID')).to.be.null);",
+                  "if (body.id) pm.collectionVariables.set('normalFeedbackId', body.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "02.03 - Criar feedback ATENCAO no limite inferior",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "X-Correlation-ID",
+                "value": "{{attentionCorrelationId}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{httpHost}}/api/v1/feedbacks",
+              "host": [
+                "{{httpHost}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "feedbacks"
+              ]
+            },
+            "description": "Valida a faixa ATENCAO sem publicação na fila.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"descricao\": \"Feedback de ATENCAO automatizado no limite da nota 5 - {{runId}}\",\n  \"nota\": 5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;",
+                  "function jsonBody() {",
+                  "  try { return pm.response.json(); }",
+                  "  catch (error) { console.error('Resposta não JSON:', pm.response.text()); return {}; }",
+                  "}",
+                  "const body = jsonBody();",
+                  "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Classificação ATENCAO', () => pm.expect(body.urgencia).to.eql('ATENCAO'));",
+                  "pm.test('Nota 5 aceita', () => pm.expect(body.nota).to.eql(5));",
+                  "pm.test('ID válido', () => pm.expect(String(body.id || '')).to.match(UUID_RE));",
+                  "pm.test('Feedback de atenção não publica evento', () => pm.expect(pm.response.headers.get('X-Event-ID')).to.be.null);",
+                  "if (body.id) pm.collectionVariables.set('attentionFeedbackId', body.id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "02.04 - Criar feedback CRITICA no limite superior",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "X-Correlation-ID",
+                "value": "{{criticalCorrelationId}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{httpHost}}/api/v1/feedbacks",
+              "host": [
+                "{{httpHost}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "feedbacks"
+              ]
+            },
+            "description": "Cria o registro usado no teste end-to-end API → fila → Notification Function → ACS Email.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"descricao\": \"Feedback CRITICO automatizado no limite da nota 4 - {{runId}}\",\n  \"nota\": 4\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;",
+                  "function jsonBody() {",
+                  "  try { return pm.response.json(); }",
+                  "  catch (error) { console.error('Resposta não JSON:', pm.response.text()); return {}; }",
+                  "}",
+                  "const body = jsonBody();",
+                  "const eventId = pm.response.headers.get('X-Event-ID');",
+                  "pm.test('HTTP 201', () => pm.response.to.have.status(201));",
+                  "pm.test('Classificação CRITICA', () => pm.expect(body.urgencia).to.eql('CRITICA'));",
+                  "pm.test('Nota 4 aceita', () => pm.expect(body.nota).to.eql(4));",
+                  "pm.test('Feedback e evento possuem UUID', () => {",
+                  "  pm.expect(String(body.id || '')).to.match(UUID_RE);",
+                  "  pm.expect(String(eventId || '')).to.match(UUID_RE);",
+                  "});",
+                  "pm.test('Correlation ID propagado', () => {",
+                  "  pm.expect(String(body.correlationId)).to.eql(pm.collectionVariables.get('criticalCorrelationId'));",
+                  "  pm.expect(pm.response.headers.get('X-Correlation-ID')).to.eql(pm.collectionVariables.get('criticalCorrelationId'));",
+                  "});",
+                  "if (body.id) pm.collectionVariables.set('criticalFeedbackId', body.id);",
+                  "if (eventId) pm.collectionVariables.set('criticalEventId', eventId);",
+                  "pm.collectionVariables.set('pollAttempt', '0');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "02.05 - Buscar feedback crítico criado",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{httpHost}}/api/v1/feedbacks/{{criticalFeedbackId}}",
+              "host": [
+                "{{httpHost}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "feedbacks",
+                "{{criticalFeedbackId}}"
+              ]
+            },
+            "description": "Confirma persistência e leitura por ID."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function jsonBody() {",
+                  "  try { return pm.response.json(); }",
+                  "  catch (error) { console.error('Resposta não JSON:', pm.response.text()); return {}; }",
+                  "}",
+                  "const body = jsonBody();",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('ID corresponde ao criado', () => pm.expect(body.id).to.eql(pm.collectionVariables.get('criticalFeedbackId')));",
+                  "pm.test('Dados persistidos corretamente', () => {",
+                  "  pm.expect(body.nota).to.eql(4);",
+                  "  pm.expect(body.urgencia).to.eql('CRITICA');",
+                  "  pm.expect(String(body.correlationId)).to.eql(pm.collectionVariables.get('criticalCorrelationId'));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "02.06 - Buscar feedback inexistente",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{httpHost}}/api/v1/feedbacks/{{missingFeedbackId}}",
+              "host": [
+                "{{httpHost}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "feedbacks",
+                "{{missingFeedbackId}}"
+              ]
+            },
+            "description": "Teste negativo da consulta por ID."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;",
+                  "function jsonBody() {",
+                  "  try { return pm.response.json(); }",
+                  "  catch (error) { console.error('Resposta não JSON:', pm.response.text()); return {}; }",
+                  "}",
+                  "const body = jsonBody();",
+                  "pm.test('HTTP 404', () => pm.response.to.have.status(404));",
+                  "pm.test('Código FEEDBACK_NOT_FOUND', () => pm.expect(body.errorCode).to.eql('FEEDBACK_NOT_FOUND'));",
+                  "pm.test('ProblemDetail possui traceId', () => pm.expect(String(body.traceId || '')).to.match(UUID_RE));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "02.07 - Aguardar notificação crítica",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-functions-key",
+                "value": "{{notificationFunctionKey}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{notificationHost}}/api/diagnostics/notifications/status/{{criticalEventId}}?feedbackId={{criticalFeedbackId}}",
+              "host": [
+                "{{notificationHost}}"
+              ],
+              "path": [
+                "api",
+                "diagnostics",
+                "notifications",
+                "status",
+                "{{criticalEventId}}"
+              ],
+              "query": [
+                {
+                  "key": "feedbackId",
+                  "value": "{{criticalFeedbackId}}"
+                }
+              ]
+            },
+            "description": "Repete automaticamente até a fila ser consumida e o ACS confirmar o envio."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const attempt = Number(pm.collectionVariables.get('pollAttempt') || '0') + 1;",
+                  "pm.collectionVariables.set('pollAttempt', String(attempt));",
+                  "const delay = Number(pm.collectionVariables.get('pollDelayMs') || '5000');",
+                  "console.log(`Consulta assíncrona ${attempt}; aguardando ${delay} ms antes da chamada.`);",
+                  "setTimeout(function () {}, delay);"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function jsonBody() {",
+                  "  try { return pm.response.json(); }",
+                  "  catch (error) { console.error('Resposta não JSON:', pm.response.text()); return {}; }",
+                  "}",
+                  "const body = jsonBody();",
+                  "const attempt = Number(pm.collectionVariables.get('pollAttempt') || '0');",
+                  "const maxAttempts = Number(pm.collectionVariables.get('pollMaxAttempts') || '12');",
+                  "const status = body.status;",
+                  "pm.test('Endpoint de status respondeu 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Status de processamento conhecido', () => {",
+                  "  pm.expect(['AGUARDANDO_PROCESSAMENTO','FEEDBACK_NAO_ENCONTRADO','PENDENTE','ENVIANDO','ENVIADA','FALHOU']).to.include(status);",
+                  "});",
+                  "console.log('Status assíncrono:', body);",
+                  "function next(name) {",
+                  "  if (pm.execution && pm.execution.setNextRequest) pm.execution.setNextRequest(name);",
+                  "  else postman.setNextRequest(name);",
+                  "}",
+                  "if (status === 'ENVIADA') {",
+                  "  pm.test('Evento processado e e-mail enviado', () => {",
+                  "    pm.expect(body.processedEvent).to.eql(true);",
+                  "    pm.expect(Number(body.attempts || 0)).to.be.at.least(1);",
+                  "    pm.expect(body.lastError == null || body.lastError === '').to.eql(true);",
+                  "  });",
+                  "  next('02.08 - Snapshot final das filas');",
+                  "} else if (status === 'FALHOU' || status === 'FEEDBACK_NAO_ENCONTRADO') {",
+                  "  pm.test(`Processamento não deveria terminar como ${status}`, () => pm.expect.fail(body.lastError || status));",
+                  "  next('02.08 - Snapshot final das filas');",
+                  "} else if (attempt < maxAttempts) {",
+                  "  next('02.07 - Aguardar notificação crítica');",
+                  "} else {",
+                  "  pm.test('Processamento concluiu dentro do limite', () => pm.expect.fail(`Timeout após ${maxAttempts} consultas; status=${status}`));",
+                  "  next('02.08 - Snapshot final das filas');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "02.08 - Snapshot final das filas",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-functions-key",
+                "value": "{{notificationFunctionKey}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{notificationHost}}/api/diagnostics/notifications/queues",
+              "host": [
+                "{{notificationHost}}"
+              ],
+              "path": [
+                "api",
+                "diagnostics",
+                "notifications",
+                "queues"
+              ]
+            },
+            "description": "Confirma que o teste não deixou nova mensagem na poison queue."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function jsonBody() {",
+                  "  try { return pm.response.json(); }",
+                  "  catch (error) { console.error('Resposta não JSON:', pm.response.text()); return {}; }",
+                  "}",
+                  "const body = jsonBody();",
+                  "const poisonBefore = Number(pm.collectionVariables.get('initialPoisonMessages') || '0');",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Codificação Base64', () => pm.expect(body.messageEncoding).to.eql('base64'));",
+                  "pm.test('A execução não aumentou a poison queue', () => pm.expect(Number(body.poisonMessages)).to.be.at.most(poisonBefore));",
+                  "console.log('Snapshot final das filas:', body);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "02.09 - Validação final dos registros criados",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{httpHost}}/api/v1/feedbacks",
+              "host": [
+                "{{httpHost}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "feedbacks"
+              ]
+            },
+            "description": "Encerra a execução confirmando a persistência dos registros de todas as faixas."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function jsonBody() {",
+                  "  try { return pm.response.json(); }",
+                  "  catch (error) { console.error('Resposta não JSON:', pm.response.text()); return {}; }",
+                  "}",
+                  "const body = jsonBody();",
+                  "const ids = Array.isArray(body) ? body.map(item => item.id) : [];",
+                  "const expected = [",
+                  "  pm.collectionVariables.get('normalFeedbackId'),",
+                  "  pm.collectionVariables.get('attentionFeedbackId'),",
+                  "  pm.collectionVariables.get('criticalFeedbackId')",
+                  "];",
+                  "const initialCount = Number(pm.collectionVariables.get('initialFeedbackCount') || '0');",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Os três feedbacks criados estão persistidos', () => expected.forEach(id => pm.expect(ids).to.include(id)));",
+                  "pm.test('A listagem cresceu em pelo menos três registros', () => pm.expect(Array.isArray(body) ? body.length : 0).to.be.at.least(initialCount + 3));",
+                  "console.log('RESUMO DA EXECUÇÃO', {",
+                  "  runId: pm.collectionVariables.get('runId'),",
+                  "  feedbacks: expected,",
+                  "  eventId: pm.collectionVariables.get('criticalEventId'),",
+                  "  reportId: pm.collectionVariables.get('reportId'),",
+                  "  primeiroStatusRelatorio: pm.collectionVariables.get('firstReportStatus')",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03 - Diagnósticos internos da Notification — exige notificationFunctionKey",
+      "description": "Valida proteção, saúde, configuração e erros dos endpoints administrativos da Notification Function. Esses endpoints não fazem parte do consumo normal da aplicação. Apenas o teste de bloqueio sem chave é executado sem notificationFunctionKey.",
+      "item": [
+        {
+          "name": "03.01 - Notification rejeita acesso sem Function Key",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{notificationHost}}/api/diagnostics/notifications/health",
+              "host": [
+                "{{notificationHost}}"
+              ],
+              "path": [
+                "api",
+                "diagnostics",
+                "notifications",
+                "health"
+              ]
+            },
+            "description": "Teste negativo do AuthorizationLevel.FUNCTION."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Acesso sem chave foi bloqueado', () => pm.expect([401, 403]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "03.02 - Saúde e configuração da Notification Function",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-functions-key",
+                "value": "{{notificationFunctionKey}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{notificationHost}}/api/diagnostics/notifications/health",
+              "host": [
+                "{{notificationHost}}"
+              ],
+              "path": [
+                "api",
+                "diagnostics",
+                "notifications",
+                "health"
+              ]
+            },
+            "description": "Valida banco, Azure Storage Queue, e-mail e configurações da função de notificação."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function jsonBody() {",
+                  "  try { return pm.response.json(); }",
+                  "  catch (error) { console.error('Resposta não JSON:', pm.response.text()); return {}; }",
+                  "}",
+                  "const body = jsonBody();",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Notification está UP', () => pm.expect(body.status).to.eql('UP'));",
+                  "pm.test('Função identificada como notification', () => pm.expect(body.function).to.eql('notification'));",
+                  "pm.test('Configurações obrigatórias presentes', () => {",
+                  "  const cfg = body.configuration || {};",
+                  "  const ausentes = Object.keys(cfg).filter(k => cfg[k] !== true);",
+                  "  pm.expect(ausentes, `Configurações ausentes: ${ausentes.join(', ')}`).to.be.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "03.03 - Status de notificação rejeita identificador inválido",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-functions-key",
+                "value": "{{notificationFunctionKey}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{notificationHost}}/api/diagnostics/notifications/status/nao-e-uuid?feedbackId=nao-e-uuid",
+              "host": [
+                "{{notificationHost}}"
+              ],
+              "path": [
+                "api",
+                "diagnostics",
+                "notifications",
+                "status",
+                "nao-e-uuid"
+              ],
+              "query": [
+                {
+                  "key": "feedbackId",
+                  "value": "nao-e-uuid"
+                }
+              ]
+            },
+            "description": "Teste negativo do endpoint de acompanhamento do consumidor."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function jsonBody() {",
+                  "  try { return pm.response.json(); }",
+                  "  catch (error) { console.error('Resposta não JSON:', pm.response.text()); return {}; }",
+                  "}",
+                  "const body = jsonBody();",
+                  "pm.test('HTTP 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código de erro correto', () => pm.expect(body.code).to.eql('INVALID_DIAGNOSTIC_IDENTIFIER'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "03.04 - E-mail da Notification rejeita destinatário inválido",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-functions-key",
+                "value": "{{notificationFunctionKey}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{notificationHost}}/api/diagnostics/notifications/email",
+              "host": [
+                "{{notificationHost}}"
+              ],
+              "path": [
+                "api",
+                "diagnostics",
+                "notifications",
+                "email"
+              ]
+            },
+            "description": "Valida tratamento de entrada inválida sem enviar e-mail.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"recipient\": \"destinatario-invalido\",\n  \"subject\": \"Não deve ser enviado\",\n  \"html\": \"<p>Teste negativo</p>\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function jsonBody() {",
+                  "  try { return pm.response.json(); }",
+                  "  catch (error) { console.error('Resposta não JSON:', pm.response.text()); return {}; }",
+                  "}",
+                  "const body = jsonBody();",
+                  "pm.test('HTTP 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código de erro correto', () => pm.expect(body.code).to.eql('INVALID_DIAGNOSTIC_EMAIL_REQUEST'));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "04 - Relatórios internos — exige reportFunctionKey",
+      "description": "Valida proteção, saúde, envio direto de e-mail, geração semanal e idempotência da Report Function. Esses endpoints são administrativos; clientes web/mobile não devem receber reportFunctionKey. Apenas o teste de bloqueio sem chave é executado sem a chave.",
+      "item": [
+        {
+          "name": "04.01 - Report rejeita acesso sem Function Key",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{reportHost}}/api/diagnostics/reports/health",
+              "host": [
+                "{{reportHost}}"
+              ],
+              "path": [
+                "api",
+                "diagnostics",
+                "reports",
+                "health"
+              ]
+            },
+            "description": "Teste negativo do AuthorizationLevel.FUNCTION."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Acesso sem chave foi bloqueado', () => pm.expect([401, 403]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "04.02 - Saúde e configuração da Report Function",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-functions-key",
+                "value": "{{reportFunctionKey}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{reportHost}}/api/diagnostics/reports/health",
+              "host": [
+                "{{reportHost}}"
+              ],
+              "path": [
+                "api",
+                "diagnostics",
+                "reports",
+                "health"
+              ]
+            },
+            "description": "Valida banco, timezone e Azure Communication Services da função de relatório."
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function jsonBody() {",
+                  "  try { return pm.response.json(); }",
+                  "  catch (error) { console.error('Resposta não JSON:', pm.response.text()); return {}; }",
+                  "}",
+                  "const body = jsonBody();",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Report está UP', () => pm.expect(body.status).to.eql('UP'));",
+                  "pm.test('Função identificada como report', () => pm.expect(body.function).to.eql('report'));",
+                  "pm.test('Configurações obrigatórias presentes', () => {",
+                  "  const cfg = body.configuration || {};",
+                  "  const ausentes = Object.keys(cfg).filter(k => cfg[k] !== true);",
+                  "  pm.expect(ausentes, `Configurações ausentes: ${ausentes.join(', ')}`).to.be.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "04.03 - E-mail da Report rejeita destinatário inválido",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-functions-key",
+                "value": "{{reportFunctionKey}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{reportHost}}/api/diagnostics/reports/email",
+              "host": [
+                "{{reportHost}}"
+              ],
+              "path": [
+                "api",
+                "diagnostics",
+                "reports",
+                "email"
+              ]
+            },
+            "description": "Valida tratamento de entrada inválida sem enviar e-mail.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"recipient\": \"destinatario-invalido\",\n  \"subject\": \"Não deve ser enviado\",\n  \"html\": \"<p>Teste negativo</p>\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function jsonBody() {",
+                  "  try { return pm.response.json(); }",
+                  "  catch (error) { console.error('Resposta não JSON:', pm.response.text()); return {}; }",
+                  "}",
+                  "const body = jsonBody();",
+                  "pm.test('HTTP 400', () => pm.response.to.have.status(400));",
+                  "pm.test('Código de erro correto', () => pm.expect(body.code).to.eql('INVALID_DIAGNOSTIC_EMAIL_REQUEST'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "04.04 - Envio direto de e-mail pela Report Function",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-functions-key",
+                "value": "{{reportFunctionKey}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{reportHost}}/api/diagnostics/reports/email",
+              "host": [
+                "{{reportHost}}"
+              ],
+              "path": [
+                "api",
+                "diagnostics",
+                "reports",
+                "email"
+              ]
+            },
+            "description": "Garante que o ACS da Report Function funciona mesmo quando o relatório semanal já foi enviado.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"recipient\": \"{{diagnosticRecipient}}\",\n  \"subject\": \"EduFeedback - teste automatizado da Report Function - {{runId}}\",\n  \"html\": \"<h1>EduFeedback</h1><p>Teste automatizado do Azure Communication Services pela Report Function.</p>\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function jsonBody() {",
+                  "  try { return pm.response.json(); }",
+                  "  catch (error) { console.error('Resposta não JSON:', pm.response.text()); return {}; }",
+                  "}",
+                  "const body = jsonBody();",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('E-mail marcado como ENVIADO', () => pm.expect(body.status).to.eql('ENVIADO'));",
+                  "pm.test('Operação e status do provedor presentes', () => {",
+                  "  pm.expect(String(body.operationId || '')).to.not.be.empty;",
+                  "  pm.expect(String(body.providerStatus || '')).to.not.be.empty;",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "04.05 - Gerar relatório semanal",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-functions-key",
+                "value": "{{reportFunctionKey}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{reportHost}}/api/diagnostics/reports/weekly",
+              "host": [
+                "{{reportHost}}"
+              ],
+              "path": [
+                "api",
+                "diagnostics",
+                "reports",
+                "weekly"
+              ]
+            },
+            "description": "Gera o relatório ou reconhece de forma idempotente que a semana já foi processada.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"referenceDate\": \"{{reportReferenceDate}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;",
+                  "function jsonBody() {",
+                  "  try { return pm.response.json(); }",
+                  "  catch (error) { console.error('Resposta não JSON:', pm.response.text()); return {}; }",
+                  "}",
+                  "const body = jsonBody();",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Status ENVIADO ou JA_ENVIADO', () => pm.expect(['ENVIADO','JA_ENVIADO']).to.include(body.status));",
+                  "pm.test('Identificação e período presentes', () => {",
+                  "  pm.expect(String(body.reportId || '')).to.match(UUID_RE);",
+                  "  pm.expect(String(body.inicio || '')).to.match(/^\\d{4}-\\d{2}-\\d{2}$/);",
+                  "  pm.expect(String(body.fim || '')).to.match(/^\\d{4}-\\d{2}-\\d{2}$/);",
+                  "});",
+                  "if (body.reportId) pm.collectionVariables.set('reportId', body.reportId);",
+                  "pm.collectionVariables.set('firstReportStatus', body.status || '');"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "04.06 - Repetir relatório e validar idempotência",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json",
+                "type": "text"
+              },
+              {
+                "key": "x-functions-key",
+                "value": "{{reportFunctionKey}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{reportHost}}/api/diagnostics/reports/weekly",
+              "host": [
+                "{{reportHost}}"
+              ],
+              "path": [
+                "api",
+                "diagnostics",
+                "reports",
+                "weekly"
+              ]
+            },
+            "description": "Confirma que a mesma semana não gera um segundo relatório/e-mail.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"referenceDate\": \"{{reportReferenceDate}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "function jsonBody() {",
+                  "  try { return pm.response.json(); }",
+                  "  catch (error) { console.error('Resposta não JSON:', pm.response.text()); return {}; }",
+                  "}",
+                  "const body = jsonBody();",
+                  "pm.test('HTTP 200', () => pm.response.to.have.status(200));",
+                  "pm.test('Segundo processamento retorna JA_ENVIADO', () => pm.expect(body.status).to.eql('JA_ENVIADO'));",
+                  "pm.test('Mesmo reportId foi reutilizado', () => pm.expect(body.reportId).to.eql(pm.collectionVariables.get('reportId')));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "httpHost",
+      "value": "https://func-edufeedback-http-rpc2026.azurewebsites.net",
+      "type": "string",
+      "description": "Host público da API HTTP/Quarkus. Não exige Function Key."
+    },
+    {
+      "key": "notificationHost",
+      "value": "https://func-edufeedback-notification-rpc2026.azurewebsites.net",
+      "type": "string"
+    },
+    {
+      "key": "reportHost",
+      "value": "https://func-edufeedback-report-rpc2026.azurewebsites.net",
+      "type": "string"
+    },
+    {
+      "key": "notificationFunctionKey",
+      "value": "",
+      "type": "string",
+      "description": "Chave administrativa dos endpoints de diagnóstico da Notification Function."
+    },
+    {
+      "key": "reportFunctionKey",
+      "value": "",
+      "type": "string",
+      "description": "Chave administrativa dos endpoints de diagnóstico da Report Function."
+    },
+    {
+      "key": "adminUsername",
+      "value": "admin",
+      "type": "string"
+    },
+    {
+      "key": "adminPassword",
+      "value": "admin123",
+      "type": "string"
+    },
+    {
+      "key": "diagnosticRecipient",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "reportReferenceDateOverride",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "pollDelayMs",
+      "value": "5000",
+      "type": "string"
+    },
+    {
+      "key": "pollMaxAttempts",
+      "value": "12",
+      "type": "string"
+    },
+    {
+      "key": "runId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "normalCorrelationId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "attentionCorrelationId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "criticalCorrelationId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "missingFeedbackId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "accessToken",
+      "value": "",
+      "type": "string",
+      "description": "JWT gerado automaticamente pelo teste de login da pasta 01."
+    },
+    {
+      "key": "normalFeedbackId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "attentionFeedbackId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "criticalFeedbackId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "criticalEventId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "pollAttempt",
+      "value": "0",
+      "type": "string"
+    },
+    {
+      "key": "initialFeedbackCount",
+      "value": "0",
+      "type": "string"
+    },
+    {
+      "key": "initialActiveMessages",
+      "value": "0",
+      "type": "string"
+    },
+    {
+      "key": "initialPoisonMessages",
+      "value": "0",
+      "type": "string"
+    },
+    {
+      "key": "reportReferenceDate",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "reportId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "firstReportStatus",
+      "value": "",
+      "type": "string"
+    }
+  ]
+}

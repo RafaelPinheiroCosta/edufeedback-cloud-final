@@ -22,12 +22,7 @@ public class QueueClientFactory {
     }
 
     QueueClientBuilder builder =
-        new QueueClientBuilder()
-            .queueName(queueName)
-            // O Azure Functions Queue Trigger usa Base64 por padrão. Sem esta
-            // configuração, o SDK v12 envia o JSON como texto puro e o host pode
-            // falhar antes de entregar a mensagem ao método Java.
-            .messageEncoding(QueueMessageEncoding.BASE64);
+        new QueueClientBuilder().queueName(queueName).messageEncoding(QueueMessageEncoding.BASE64);
 
     if (config.connectionString().isPresent()) {
       builder.connectionString(config.connectionString().get());

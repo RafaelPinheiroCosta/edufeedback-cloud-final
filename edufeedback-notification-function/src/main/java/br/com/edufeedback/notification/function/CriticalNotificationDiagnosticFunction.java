@@ -37,8 +37,6 @@ public class CriticalNotificationDiagnosticFunction {
       int nota = input.nota() == null ? 0 : input.nota();
       UUID correlationId = UUID.randomUUID();
 
-      // A avaliação é confirmada no banco antes da publicação. Assim, o Queue Trigger não recebe
-      // um feedbackId inexistente caso a mensagem seja consumida imediatamente.
       var feedback = persistence.create(input.descricao(), nota, correlationId);
       var event =
           new FeedbackCriticoEvent(

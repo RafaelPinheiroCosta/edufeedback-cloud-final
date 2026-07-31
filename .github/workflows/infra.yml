@@ -80,7 +80,6 @@ jobs:
           generated = (
               original.rstrip()
               + "\n\n"
-              + "// Valores fornecidos temporariamente pelo GitHub Actions.\n"
               + f"param adminEmail = '{bicep_string(admin_email)}'\n"
               + "param databaseAdminPassword = "
               + f"'{bicep_string(postgres_password)}'\n"

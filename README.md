@@ -1,116 +1,218 @@
 # EduFeedback Cloud
 
-Plataforma serverless para registrar feedbacks educacionais, enviar alertas de avaliações críticas e produzir relatórios semanais. O projeto foi desenvolvido em Java 21 e Quarkus, executado em Azure Functions e integrado a PostgreSQL, Azure Storage Queue, Azure Communication Services Email e Application Insights.
+Backend serverless para registro de feedbacks educacionais, envio assíncrono de alertas críticos e geração de relatórios semanais. A solução utiliza Java 21, Quarkus, Azure Functions, PostgreSQL, Azure Storage Queue, Azure Communication Services Email, Application Insights e infraestrutura declarada em Bicep.
+
+## Escopo funcional
+
+- Receber feedbacks públicos com descrição e nota de 0 a 10.
+- Classificar automaticamente a urgência do feedback.
+- Persistir os dados em PostgreSQL com schema versionado pelo Flyway.
+- Publicar eventos apenas para feedbacks críticos.
+- Consumir eventos por Queue Trigger e enviar alertas por e-mail.
+- Garantir idempotência no processamento de mensagens.
+- Gerar e enviar um relatório semanal consolidado.
+- Autenticar o administrador com BCrypt e JWT RS256.
+- Proteger consultas administrativas por papel `ADMIN`.
+- Padronizar erros com Problem Details e rastrear operações por `X-Correlation-ID`.
+- Disponibilizar OpenAPI, Swagger UI, health checks, métricas e logs estruturados.
 
 ## Arquitetura
 
 ```text
-Cliente / Postman / Swagger
-          |
-          v
-Azure Function HTTP (Quarkus REST)
-  - feedback público
-  - autenticação administrativa
+Cliente, Postman ou Swagger UI
+              |
+              v
+Azure Function HTTP + Quarkus REST
+  - envio público de feedback
+  - login administrativo
   - consultas protegidas por JWT
-          |
-          +--> PostgreSQL
-          |
-          +--> Azure Storage Queue
-                    |
-                    v
-          Azure Function Notification
-          - Queue Trigger
-          - endpoint administrativo de teste
-          - ACS Email
+              |
+              +-----------------------> PostgreSQL
+              |
+              +--> Azure Storage Queue
+                         |
+                         v
+              Azure Function Notification
+                - Queue Trigger
+                - idempotência
+                - persistência de status
+                - Azure Communication Services Email
 
 Azure Function Report
-- Timer Trigger semanal
-- endpoint administrativo de teste
-- PostgreSQL + ACS Email
+  - Timer Trigger semanal
+  - consolidação no PostgreSQL
+  - idempotência por período
+  - Azure Communication Services Email
 
-As três Function Apps enviam logs ao Azure Application Insights.
+Application Insights recebe a telemetria das três Function Apps.
+Key Vault armazena os segredos usados pelas aplicações.
 ```
+
+## Regras de negócio
+
+| Nota | Urgência | Comportamento |
+|---:|---|---|
+| 0 a 4 | `CRITICA` | Persiste e publica evento na fila |
+| 5 a 7 | `ATENCAO` | Persiste sem publicar evento |
+| 8 a 10 | `NORMAL` | Persiste sem publicar evento |
+
+A descrição deve possuir entre 10 e 2000 caracteres. A nota deve estar entre 0 e 10, inclusive.
 
 ## Módulos
 
 | Módulo | Responsabilidade |
 |---|---|
-| `edufeedback-domain` | Regras, modelos e contratos de domínio |
-| `edufeedback-api-common` | Problem Details, tratamento global e correlação HTTP |
-| `edufeedback-persistence` | Entidades, repositórios Panache e migrations Flyway |
-| `edufeedback-messaging` | Publicação e contratos da Azure Storage Queue |
-| `edufeedback-email` | Integração com Azure Communication Services Email |
-| `edufeedback-http-function` | API REST pública, login e consultas administrativas |
-| `edufeedback-notification-function` | Consumo da fila e envio de alertas críticos |
-| `edufeedback-report-function` | Geração e envio do relatório semanal |
+| [`edufeedback-domain`](edufeedback-domain/README.md) | Regras e enumerações independentes de infraestrutura |
+| [`edufeedback-api-common`](edufeedback-api-common/README.md) | Problem Details, exceções e correlação HTTP |
+| [`edufeedback-persistence`](edufeedback-persistence/README.md) | Entidades, repositórios Panache e migrations Flyway |
+| [`edufeedback-messaging`](edufeedback-messaging/README.md) | Contrato do evento e integração com Azure Storage Queue |
+| [`edufeedback-email`](edufeedback-email/README.md) | Integração com Azure Communication Services Email |
+| [`edufeedback-http-function`](edufeedback-http-function/README.md) | API pública, autenticação e consultas administrativas |
+| [`edufeedback-notification-function`](edufeedback-notification-function/README.md) | Consumo da fila e alertas críticos |
+| [`edufeedback-report-function`](edufeedback-report-function/README.md) | Relatório semanal por Timer Trigger |
+| [`infra`](infra/README.md) | Infraestrutura Azure e automação de deployment |
 
-Cada módulo possui um README próprio com suas responsabilidades e forma de execução.
+## Endpoints da API HTTP
 
-## Autenticação e administrador bootstrap
+A Function HTTP usa uma rota curinga da Azure e encaminha as requisições para o Quarkus. O nível de autorização da Function é anônimo; a API aplica autenticação e autorização por JWT.
 
-O projeto mantém autenticação JWT RS256 e RBAC. O envio de feedback é público; consultas e operações administrativas exigem o papel `ADMIN`.
+| Método | Caminho | Acesso | Descrição |
+|---|---|---|---|
+| `POST` | `/api/v1/auth/login` | Público | Emite JWT administrativo |
+| `POST` | `/api/v1/feedbacks` | Público | Registra um feedback |
+| `GET` | `/api/v1/feedbacks` | `ADMIN` | Lista os feedbacks |
+| `GET` | `/api/v1/feedbacks/{id}` | `ADMIN` | Consulta um feedback pelo ID |
 
-Para simplificar a avaliação do Tech Challenge, a HTTP Function cria automaticamente, na primeira inicialização, um administrador de demonstração:
+Exemplo de envio:
 
-```text
-usuário: admin
-senha: admin123
-```
-
-A senha **não é salva em texto puro**. O bootstrap aplica BCrypt e persiste somente o hash na tabela `edufeedback.usuario`. Em reinicializações posteriores, o usuário existente é preservado e a senha não é redefinida.
-
-Fluxo:
-
-```text
-POST /api/v1/auth/login
-  -> busca o usuário ativo no PostgreSQL
-  -> valida a senha com BCrypt
-  -> gera JWT RS256 com papel ADMIN
-  -> retorna accessToken do tipo Bearer
+```json
+{
+  "descricao": "A aula apresentou o conteúdo com clareza.",
+  "nota": 9
+}
 ```
 
 Exemplo de resposta:
 
 ```json
 {
-  "accessToken": "eyJ...",
-  "tokenType": "Bearer",
-  "expiresIn": 3600
+  "id": "5c9024cb-0e1f-46fe-92cc-63684830a51a",
+  "descricao": "A aula apresentou o conteúdo com clareza.",
+  "nota": 9,
+  "urgencia": "NORMAL",
+  "dataEnvio": "2026-07-30T23:20:00Z",
+  "correlationId": "9dfabb14-1836-49d7-853a-d5a3900b1b0f"
 }
 ```
 
-Os endpoints protegidos recebem:
+A criação retorna `201`, o cabeçalho `Location` e `X-Correlation-ID`. Feedbacks críticos também retornam `X-Event-ID`.
+
+## Autenticação e autorização
+
+Na primeira inicialização, a HTTP Function cria o administrador de demonstração somente quando ele ainda não existe:
+
+```text
+username: admin
+password: admin123
+role: ADMIN
+```
+
+A senha é convertida para BCrypt antes da persistência. O login emite um JWT RS256 com duração padrão de 3600 segundos.
 
 ```http
 Authorization: Bearer <accessToken>
 ```
 
-As chaves RSA incluídas nos resources existem apenas para tornar a demonstração reproduzível. Em produção, as credenciais devem ser gerenciadas por um provedor de identidade e as chaves armazenadas no Azure Key Vault, com rotação e auditoria.
+As chaves RSA presentes nos resources atendem ao ambiente acadêmico e à execução reproduzível. Em um ambiente corporativo, as chaves devem ser externas, rotacionadas e administradas por um provedor de identidade ou cofre de segredos.
 
-## Problem Details e tratamento de erros
+## Processamento assíncrono
 
-O módulo `edufeedback-api-common` centraliza o tratamento de erros e devolve respostas compatíveis com Problem Details. São tratados, entre outros:
+Um feedback `CRITICA` gera um `FeedbackCriticoEvent` com `eventId`, `correlationId`, data do evento e dados mínimos do feedback. A avaliação é confirmada no banco antes da publicação.
 
-- validação e JSON malformado: 400;
-- autenticação: 401;
-- autorização: 403;
-- recurso inexistente: 404;
-- método não permitido: 405;
-- conflito: 409;
-- mídia não suportada: 415;
-- regra de negócio: 422;
-- falha inesperada: 500.
+A Notification Function:
 
-O mesmo padrão é reutilizado pelas três APIs HTTP, sem pacotes de erro duplicados.
+1. recebe a mensagem da fila `feedback-critical-notifications`;
+2. valida e desserializa o evento;
+3. verifica se o evento já foi processado;
+4. prepara ou recupera o registro de notificação;
+5. envia o e-mail;
+6. registra o resultado e o evento processado.
+
+Falhas fazem a Azure Functions repetir a mensagem conforme a política do Queue Trigger. Após o limite de tentativas, a mensagem pode ser movida para a fila poison.
+
+## Relatório semanal
+
+A Report Function executa com a expressão NCRONTAB:
+
+```text
+0 0 11 * * MON
+```
+
+O disparo ocorre às 11:00 UTC de segunda-feira. A aplicação calcula o período no timezone configurado por `APP_TIMEZONE`, consolida quantidade, média e distribuição por urgência, persiste o relatório e envia o e-mail. A restrição única por período impede duplicidade.
+
+## Diagnósticos internos
+
+Os endpoints abaixo pertencem às Functions de Notification e Report e exigem Function Key. Eles são destinados a validação operacional, pipeline ou uso administrativo controlado; não devem ser expostos em frontend ou aplicativo mobile.
+
+### Notification
+
+| Método | Caminho |
+|---|---|
+| `GET` | `/api/diagnostics/notifications/health` |
+| `POST` | `/api/diagnostics/notifications/email` |
+| `POST` | `/api/diagnostics/notifications/critical` |
+| `GET` | `/api/diagnostics/notifications/status/{eventId}` |
+| `GET` | `/api/diagnostics/notifications/queues` |
+
+### Report
+
+| Método | Caminho |
+|---|---|
+| `GET` | `/api/diagnostics/reports/health` |
+| `POST` | `/api/diagnostics/reports/email` |
+| `POST` | `/api/diagnostics/reports/weekly` |
+
+## Problem Details
+
+Erros da API são representados em JSON com campos compatíveis com RFC 7807 e extensões para diagnóstico:
+
+```json
+{
+  "type": "about:blank",
+  "title": "Recurso não encontrado",
+  "status": 404,
+  "detail": "Feedback não encontrado.",
+  "instance": "/api/v1/feedbacks/00000000-0000-0000-0000-000000000000",
+  "errorCode": "FEEDBACK_NOT_FOUND",
+  "traceId": "c7058ec9-7819-4a60-a514-8e291bf9a858",
+  "timestamp": "2026-07-30T23:20:00Z"
+}
+```
+
+A aplicação trata validação, JSON malformado, credenciais inválidas, acesso não autorizado, recurso inexistente, conflito, método não permitido, tipo de mídia não suportado, falhas externas e erros inesperados.
+
+## Persistência
+
+O banco usa o schema `edufeedback` e migrations Flyway:
+
+| Migration | Estrutura |
+|---|---|
+| `V1` | Criação do schema |
+| `V2` | Avaliações |
+| `V3` | Notificações |
+| `V4` | Relatórios semanais |
+| `V5` | Eventos processados |
+| `V6` | Usuário administrativo |
+
+O Hibernate usa `validate`; alterações estruturais são feitas por migration.
 
 ## Observabilidade
 
-O código registra logs estruturados de autenticação, feedback, fila, notificação, relatório, e-mail e falhas. Um filtro HTTP recebe ou gera `X-Correlation-ID`, inclui o valor no MDC e o devolve na resposta.
-
-Eventos relevantes incluem:
+Cada requisição recebe ou gera um `X-Correlation-ID`. O valor é devolvido na resposta e utilizado nos logs de negócio. Eventos relevantes incluem:
 
 ```text
-event=security.bootstrap.created
+event=http.request.started
+event=http.request.completed
 event=auth.login.succeeded
 event=feedback.created
 event=queue.message.published
@@ -121,164 +223,171 @@ event=email.send.succeeded
 event=api.error
 ```
 
-Não são registrados senhas, hashes, JWTs, connection strings ou o conteúdo completo dos e-mails.
+Em produção, os logs são emitidos em JSON e enviados ao Application Insights. Senhas, hashes, tokens e connection strings não são registrados.
 
-No Azure, mantenha nas três Function Apps:
-
-```text
-APPLICATIONINSIGHTS_CONNECTION_STRING
-APPLICATIONINSIGHTS_ENABLE_AGENT
-```
-
-Consulta KQL inicial:
+Consulta KQL básica:
 
 ```kusto
 traces
 | where timestamp > ago(30m)
 | where message contains "event="
-| project timestamp, message, severityLevel
+| project timestamp, cloud_RoleName, message, severityLevel
 | order by timestamp desc
 ```
 
-## Swagger e OpenAPI
+## OpenAPI, Swagger e health
 
-Em execução local:
+Em desenvolvimento Quarkus:
 
 ```text
-/q/swagger-ui
 /q/openapi
+/q/swagger-ui
+/q/health
 ```
 
-Na Azure Functions, normalmente há o prefixo `/api`:
+Nas Azure Functions, o prefixo padrão é `/api`:
 
 ```text
-/api/q/swagger-ui
 /api/q/openapi
+/api/q/swagger-ui
+/api/q/health
 ```
 
-O Swagger apresenta o botão **Authorize** para informar o Bearer Token.
-
-## Variáveis de ambiente
+## Configuração
 
 ### HTTP Function
 
-```text
-DATABASE_URL
-DATABASE_USERNAME
-DATABASE_PASSWORD
-AZURE_STORAGE_CONNECTION_STRING
-QUEUE_NAME
-```
+| Variável | Finalidade |
+|---|---|
+| `AZURE_HTTP_FUNCTION_APP` | Nome usado no pacote da Function |
+| `DATABASE_URL` | URL JDBC do PostgreSQL |
+| `DATABASE_USERNAME` | Usuário do banco |
+| `DATABASE_PASSWORD` | Senha do banco |
+| `AZURE_STORAGE_CONNECTION_STRING` | Acesso à Storage Queue |
+| `QUEUE_NAME` | Nome da fila de feedback crítico |
 
 ### Notification Function
 
-```text
-DATABASE_URL
-DATABASE_USERNAME
-DATABASE_PASSWORD
-AZURE_STORAGE_CONNECTION_STRING
-QUEUE_NAME
-AZURE_COMMUNICATION_CONNECTION_STRING
-EMAIL_SENDER
-ADMIN_EMAIL
-```
+| Variável | Finalidade |
+|---|---|
+| `AZURE_NOTIFICATION_FUNCTION_APP` | Nome usado no pacote da Function |
+| `DATABASE_URL` | URL JDBC do PostgreSQL |
+| `DATABASE_USERNAME` | Usuário do banco |
+| `DATABASE_PASSWORD` | Senha do banco |
+| `AZURE_STORAGE_CONNECTION_STRING` | Acesso à Storage Queue |
+| `QUEUE_NAME` | Fila consumida pelo Queue Trigger |
+| `AZURE_COMMUNICATION_CONNECTION_STRING` | Acesso ao serviço de e-mail |
+| `EMAIL_SENDER` | Endereço remetente validado |
+| `ADMIN_EMAIL` | Destinatário dos alertas |
 
 ### Report Function
 
-```text
-DATABASE_URL
-DATABASE_USERNAME
-DATABASE_PASSWORD
-AZURE_COMMUNICATION_CONNECTION_STRING
-EMAIL_SENDER
-ADMIN_EMAIL
-APP_TIMEZONE
-```
+| Variável | Finalidade |
+|---|---|
+| `AZURE_REPORT_FUNCTION_APP` | Nome usado no pacote da Function |
+| `DATABASE_URL` | URL JDBC do PostgreSQL |
+| `DATABASE_USERNAME` | Usuário do banco |
+| `DATABASE_PASSWORD` | Senha do banco |
+| `AZURE_COMMUNICATION_CONNECTION_STRING` | Acesso ao serviço de e-mail |
+| `EMAIL_SENDER` | Endereço remetente validado |
+| `ADMIN_EMAIL` | Destinatário do relatório |
+| `APP_TIMEZONE` | Timezone usado no cálculo do período |
 
-Valores internos da plataforma, como `AzureWebJobsStorage`, `DEPLOYMENT_STORAGE_CONNECTION_STRING` e `APPLICATIONINSIGHTS_CONNECTION_STRING`, devem ser preservados nas Function Apps.
+A infraestrutura também configura `AzureWebJobsStorage`, `FUNCTIONS_WORKER_RUNTIME`, `FUNCTIONS_EXTENSION_VERSION`, `QUARKUS_PROFILE` e `APPLICATIONINSIGHTS_CONNECTION_STRING`.
 
-## Banco de dados
-
-O Flyway executa as migrations ao iniciar. A migration `V6__create_usuario.sql` cria a tabela usada pelo administrador bootstrap. A estratégia do Hibernate é `validate`, evitando alterações automáticas no schema.
-
-## Execução local
-
-Pré-requisitos:
+## Pré-requisitos
 
 - JDK 21;
-- Maven 3.9+;
-- PostgreSQL acessível;
-- emulador ou conta de Azure Storage para os fluxos de fila.
+- Maven 3.9 ou Maven Wrapper;
+- PostgreSQL para execução local persistente;
+- Azurite ou uma conta Azure Storage para o fluxo de fila;
+- Azure Functions Core Tools para executar Queue e Timer Triggers localmente;
+- Azure CLI e Bicep CLI para administrar a infraestrutura.
 
-Na raiz:
+## Build e testes
 
-```bash
-mvn spotless:apply
-mvn clean verify
-```
-
-Executar a HTTP Function em desenvolvimento:
+Linux ou macOS:
 
 ```bash
-mvn -pl edufeedback-http-function -am quarkus:dev
+./mvnw clean verify
 ```
 
-As demais Functions podem ser iniciadas pelos respectivos módulos conforme seus READMEs.
+Windows PowerShell:
 
-## Testes com Postman
+```powershell
+.\mvnw.cmd clean verify
+```
+
+O build executa compilação, testes JUnit, testes HTTP com Quarkus, Spotless e JaCoCo. Os testes da HTTP Function usam H2 em memória no modo de compatibilidade PostgreSQL.
+
+## Execução local da API HTTP
+
+Linux ou macOS:
+
+```bash
+./mvnw -pl edufeedback-http-function -am quarkus:dev
+```
+
+Windows PowerShell:
+
+```powershell
+.\mvnw.cmd -pl edufeedback-http-function -am quarkus:dev
+```
+
+A porta padrão é `8081`.
+
+## Coleção Postman
 
 Importe:
 
 ```text
-postman/EduFeedback-Azure-JWT.postman_collection.json
+postman/EduFeedback.postman_collection.json
 ```
 
-A coleção está preparada para autenticar com `admin/admin123`, salvar o token e usá-lo nas requisições administrativas. Ajuste apenas as URLs das três Function Apps quando necessário.
+A coleção contém cenários de sucesso e falha e pode ser executada integralmente pelo Collection Runner. Ela gera os IDs, o JWT e os identificadores de correlação durante a execução. Para a validação completa, preencha somente as Function Keys de Notification e Report. A API HTTP normal não exige Function Key.
 
-## CI/CD com GitHub Actions
+## CI/CD
 
-Estrutura:
+| Workflow | Finalidade |
+|---|---|
+| `.github/workflows/ci.yml` | Build, testes, formatação e publicação dos relatórios |
+| `.github/workflows/application.yml` | Empacotamento e deployment das três Function Apps |
+| `.github/workflows/infra.yml` | Validação, what-if e deployment da infraestrutura Bicep |
+
+Os workflows de aplicação e infraestrutura usam autenticação OIDC. Secrets necessários no GitHub:
 
 ```text
-.github/workflows/
-├── ci.yml
-├── cd-http.yml
-├── cd-notification.yml
-├── cd-report.yml
-└── reusable-function-deploy.yml
+AZURE_CLIENT_ID
+AZURE_TENANT_ID
+AZURE_SUBSCRIPTION_ID
+ADMIN_EMAIL
+POSTGRES_ADMIN_PASSWORD
 ```
 
-O CI compila, testa, executa Spotless e gera relatórios JaCoCo. Após sucesso na branch `main`, cada workflow de CD chama o mesmo workflow reutilizável.
+Os dois últimos são usados somente pelo workflow de infraestrutura.
 
-Secrets exigidos no repositório:
+## Estrutura do repositório
 
 ```text
-AZURE_FUNCTIONAPP_PUBLISH_PROFILE_HTTP
-AZURE_FUNCTIONAPP_PUBLISH_PROFILE_NOTIFICATION
-AZURE_FUNCTIONAPP_PUBLISH_PROFILE_REPORT
+.github/workflows/               Pipelines de CI/CD
+edufeedback-api-common/          Contratos HTTP compartilhados
+edufeedback-domain/              Regras de domínio
+edufeedback-email/               Adapter de e-mail
+edufeedback-http-function/       API REST em Azure Function
+edufeedback-messaging/           Adapter de fila
+edufeedback-notification-function/ Queue Trigger e notificação
+edufeedback-persistence/         Persistência e migrations
+edufeedback-report-function/     Timer Trigger e relatório
+infra/                           Recursos Azure em Bicep
+postman/                         Coleção de validação
+pom.xml                          Agregador Maven
 ```
 
-Function Apps esperadas pelos workflows:
+## Segurança operacional
 
-```text
-func-edufeedback-http
-func-edufeedback-notification
-func-edufeedback-report
-```
-
-## Substituição das Functions existentes
-
-1. Confirme as variáveis de ambiente e o Application Insights nas três Function Apps.
-2. Habilite a autenticação básica SCM necessária ao Publish Profile.
-3. Baixe um Publish Profile novo de cada Function App.
-4. Cadastre os três secrets no GitHub Actions.
-5. Execute `mvn spotless:apply` e `mvn clean verify` localmente.
-6. Faça push para `main`.
-7. Verifique o CI e os três CDs.
-8. Teste login, feedback, notificação, relatório, Swagger e logs.
-
-O deploy substitui o pacote de código, mas mantém a infraestrutura, URLs, configurações e integrações já existentes na Azure.
-
-## Infraestrutura Azure com Bicep
-
-A infraestrutura completa e os pipelines OIDC estão em [`infra/`](infra/README.md). A migração preserva o código funcional e adiciona `validate`, `what-if`, deployment modular, Key Vault references, Managed Identity e deploy das três Functions.
+- Function Keys de diagnóstico permanecem fora do código-fonte.
+- Segredos de aplicação são referenciados pelo Key Vault.
+- Managed Identities recebem acesso de leitura aos segredos.
+- Deployment de aplicação e infraestrutura usa OIDC, sem Publish Profile versionado.
+- O acesso HTTP é restrito por TLS 1.2 ou superior e HTTPS obrigatório.
+- O endpoint público registra somente feedbacks; consultas de dados exigem JWT `ADMIN`.

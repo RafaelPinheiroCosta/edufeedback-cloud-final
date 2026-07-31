@@ -4,7 +4,6 @@ import java.net.URI;
 import java.time.Instant;
 import java.util.Map;
 
-/** Resposta padronizada no formato RFC 7807, com extensões úteis para observabilidade. */
 public record ApiProblem(
     URI type,
     String title,
